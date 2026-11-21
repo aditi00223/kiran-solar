@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { mockOrders } from '@/lib/mockOrders'
 import { mockLeads } from '@/lib/mockLeads'
-import { UNITS } from '@/lib/mockWarranty'
+import { ensureUnits } from '@/lib/mockWarranty'
 import { dispatches, dispatchOrder } from '@/lib/mockDispatch'
 
 export default function Dispatch() {
@@ -17,7 +17,8 @@ export default function Dispatch() {
 
   const orderId = pickedId ?? (packed.find((o) => !dispatches[o.id]) ?? packed[0])?.id ?? null
   const order = packed.find((o) => o.id === orderId) ?? null
-  const units = order ? UNITS[order.id] || [] : []
+  // Fresh orders with no sample serials get generated ones, so the demo works
+  const units = order ? ensureUnits(order.id) : []
   const scanned = scannedByOrder[orderId] || []
   const isDispatched = order ? Boolean(dispatches[order.id]) : false
   const allScanned = units.length > 0 && scanned.length === units.length

@@ -23,6 +23,18 @@ export const UNITS = {
   ],
 }
 
+// Orders with no sample serials get 3 generated ones, so the demo works with a fresh order.
+export function ensureUnits(orderId) {
+  if (!UNITS[orderId]) {
+    UNITS[orderId] = [
+      { serial: `SP550-O${orderId}-1`, product: 'Solar Panel 550W', warrantyYears: 25 },
+      { serial: `SP550-O${orderId}-2`, product: 'Solar Panel 550W', warrantyYears: 25 },
+      { serial: `INV3K-O${orderId}-1`, product: 'On-Grid Inverter 3 kW', warrantyYears: 5 },
+    ]
+  }
+  return UNITS[orderId]
+}
+
 // orderId -> { date, units: [{ serial, product, warrantyYears, start, end }] }
 export const deliveries = {}
 
@@ -37,7 +49,7 @@ export function addYears(iso, years) {
 export function deliver(orderId, date = todayISO()) {
   deliveries[orderId] = {
     date,
-    units: (UNITS[orderId] || []).map((u) => ({
+    units: ensureUnits(orderId).map((u) => ({
       ...u,
       start: date,
       end: addYears(date, u.warrantyYears),
