@@ -105,9 +105,7 @@ const callCheckSchema = z.object({
 
 const updateLeadSchema = z
   .object({
-    status: z
-      .literal("LOST", { errorMap: () => ({ message: "Status can only be changed to LOST here" }) })
-      .optional(),
+        status: z.literal("LOST", { message: "Status can only be changed to LOST here" }).optional(),
     assignedToId: z.number().int("assignedToId must be a whole number").optional(),
   })
   .refine((v) => v.status !== undefined || v.assignedToId !== undefined, {

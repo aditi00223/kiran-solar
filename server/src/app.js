@@ -1,6 +1,6 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
+const express = require("express"); // creates the app object
+const cors = require("cors"); // lets react app run , call this API from the browser
+const helmet = require("helmet"); // adds security headers to every response (like blocking the page from being embedded in another site). One line, and it avoids a whole class of browser attacks.
 const morgan = require("morgan");
 const { ok } = require("./utils/response");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
@@ -13,7 +13,7 @@ const quoteRoutes = require("./routes/quotes");
 const orderRoutes = require("./routes/orders");
 const dispatchRoutes = require("./routes/dispatch");
 const installJobRoutes = require("./routes/installJobs");
-const supportRoutes = require("./routes/support");
+const supportRoutes = require("./routes/tickets");
 const stockRoutes = require("./routes/stock");
 const subsidyRoutes = require("./routes/subsidies");
 const payrollRoutes = require("./routes/payroll");
@@ -49,3 +49,5 @@ app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
+
+// it decides the order every request passes through
