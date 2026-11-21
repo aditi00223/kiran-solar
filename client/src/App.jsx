@@ -57,7 +57,7 @@ function App() {
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
-      <Toaster richColors position="top-right" />
+      <Toaster richColors closeButton position="top-right" />
     </BrowserRouter>
   )
 }
