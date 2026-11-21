@@ -106,9 +106,9 @@ export default function SurveyDetail() {
         <CardContent>
           {survey.result ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Detail label="Roof type">{survey.result.roofType}</Detail>
-              <Detail label="Usable roof area">{survey.result.usableArea} sq m</Detail>
-              <Detail label="Shadow issue">{survey.result.shadowIssue}</Detail>
+              <Detail label="Roof direction">{survey.result.direction}</Detail>
+              <Detail label="Roof tilt">{survey.result.tilt} degrees</Detail>
+              <Detail label="Cable distance">{survey.result.cableDistance} m</Detail>
               <div className="sm:col-span-2 lg:col-span-3">
                 <Detail label="Technician notes">{survey.result.notes}</Detail>
               </div>
