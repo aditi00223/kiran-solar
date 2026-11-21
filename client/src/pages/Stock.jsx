@@ -1,197 +1,252 @@
-﻿import { useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Download, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import api from '@/lib/api'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import DataTable from '@/components/DataTable'
 
-const initialProducts = [
-  { id: 1, name: 'Solar Panel 550W', quantity: 42, minimum: 20 },
-  { id: 2, name: 'On-Grid Inverter 3 kW', quantity: 6, minimum: 8 },
-  { id: 3, name: 'Off-Grid Inverter 5 kW', quantity: 3, minimum: 5 },
-  { id: 4, name: 'Battery 150Ah', quantity: 18, minimum: 10 },
-  { id: 5, name: 'Mounting Structure Set', quantity: 25, minimum: 10 },
-  { id: 6, name: 'DC Cable (metres)', quantity: 120, minimum: 150 },
-]
+const rupees = (n) => 'Rs ' + Number(n || 0).toLocaleString('en-IN')
+const selectClass = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'
 
 export default function Stock() {
-  const [products, setProducts] = useState(initialProducts)
-  const [history, setHistory] = useState([])
-  const [form, setForm] = useState({ productId: '1', supplier: '', quantity: '', cost: '' })
-  const [error, setError] = useState('')
+  const navigate = useNavigate()
+  const role = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user'))?.role
+    } catch {
+      return null
+    }
+  })()
+  const canBuy = role === 'WAREHOUSE'
+
+  const [products, setProducts] = useState([])
+  const [movements, setMovements] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [purchases, setPurchases] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [search, setSearch] = useState('')
   const [onlyLow, setOnlyLow] = useState(false)
+  const [form, setForm] = useState({ productId: '', supplierId: '', quantity: '', unitCost: '' })
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const lowCount = products.filter((p) => p.quantity < p.minimum).length
-  const totalSpend = history.reduce((sum, h) => sum + h.cost, 0)
-  const visibleProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) &&
-      (!onlyLow || p.quantity < p.minimum)
-  )
+  const load = useCallback(async () => {
+    try {
+      const calls = [
+        api.get('/stock'),
+        api.get('/stock/movements', { params: { limit: 50 } }),
+        api.get('/purchases', { params: { limit: 50 } }),
+      ]
+      if (canBuy) calls.push(api.get('/suppliers'))
+      const [s, m, p, sup] = await Promise.all(calls)
+      setProducts(s.data.data)
+      setMovements(m.data.data)
+      setPurchases(p.data.data)
+      if (sup) setSuppliers(sup.data.data)
+      setLoadError(null)
+    } catch (err) {
+      if (err.response?.status === 401) {
+        localStorage.clear()
+        navigate('/login')
+        return
+      }
+      setLoadError(err.response?.data?.error || 'Could not load stock. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate, canBuy])
 
-  function handleChange(e) {
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const lowCount = products.filter((p) => p.isLow).length
+  const totalSpend = purchases.reduce((sum, p) => sum + Number(p.totalCost || 0), 0)
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return products.filter((p) => (!q || p.name.toLowerCase().includes(q)) && (!onlyLow || p.isLow))
+  }, [products, search, onlyLow])
+
+  const total = Number(form.quantity || 0) * Number(form.unitCost || 0)
+
+  function change(e) {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  function handleSubmit(e) {
+  async function submit(e) {
     e.preventDefault()
-    const qty = Number(form.quantity)
-    const cost = Number(form.cost)
-    if (!form.supplier.trim()) return setError('Enter the supplier name.')
-    if (!qty || qty <= 0) return setError('Quantity must be more than 0.')
-    if (!cost || cost <= 0) return setError('Cost must be more than 0.')
     setError('')
-    const product = products.find((p) => p.id === Number(form.productId))
-    setProducts(
-      products.map((p) => (p.id === product.id ? { ...p, quantity: p.quantity + qty } : p))
-    )
-    setHistory([
-      {
-        id: Date.now(),
-        date: new Date().toLocaleString(),
-        product: product.name,
-        supplier: form.supplier.trim(),
-        quantity: qty,
-        cost,
-      },
-      ...history,
-    ])
-    setForm({ ...form, supplier: '', quantity: '', cost: '' })
+    const quantity = Number(form.quantity)
+    const unitCost = Number(form.unitCost)
+    if (!form.productId) return setError('Choose a product.')
+    if (!form.supplierId) return setError('Choose a supplier.')
+    if (!quantity || quantity < 1) return setError('Quantity must be at least 1.')
+    if (!unitCost || unitCost <= 0) return setError('Enter the cost per unit.')
+    setBusy(true)
+    try {
+      await api.post('/purchases', {
+        supplierId: Number(form.supplierId),
+        productId: Number(form.productId),
+        quantity,
+        unitCost,
+      })
+      toast.success('Purchase saved. Stock updated.')
+      setForm({ ...form, quantity: '', unitCost: '' })
+      await load()
+    } catch (err) {
+      const message = err.response?.data?.error || 'Could not save the purchase.'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   function exportCsv() {
     const rows = [
-      ['Date', 'Product', 'Supplier', 'Qty added', 'Cost (Rs)'],
-      ...history.map((h) => [h.date, h.product, h.supplier, h.quantity, h.cost]),
+      ['Date', 'Product', 'Type', 'Quantity'],
+      ...movements.map((m) => [String(m.createdAt).slice(0, 10), m.name, m.type, m.quantity]),
     ]
-    const csv = rows
-      .map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(','))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
+    const csv = rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = 'stock-purchases.csv'
+    a.download = 'stock-movements.csv'
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Stock and Purchases</h1>
+  const stockColumns = [
+    { key: 'name', header: 'Product', render: (p) => <span className="font-medium">{p.name}</span> },
+    { key: 'category', header: 'Category' },
+    { key: 'inStock', header: 'In stock' },
+    { key: 'lowStockLevel', header: 'Minimum' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (p) =>
+        p.isLow ? (
+          <Badge variant="secondary" className="border-transparent bg-red-100 text-red-700">Low stock</Badge>
+        ) : (
+          <Badge variant="secondary" className="border-transparent bg-green-100 text-green-700">OK</Badge>
+        ),
+    },
+  ]
 
+  const movementColumns = [
+    { key: 'createdAt', header: 'Date', render: (m) => String(m.createdAt).slice(0, 10) },
+    { key: 'name', header: 'Product' },
+    {
+      key: 'type',
+      header: 'Type',
+      render: (m) => (m.type === 'PURCHASE' ? 'Purchase in' : m.type === 'DISPATCH' ? 'Dispatched out' : m.type),
+    },
+    {
+      key: 'quantity',
+      header: 'Quantity',
+      render: (m) => (
+        <span className={m.quantity < 0 ? 'text-destructive' : 'text-green-700'}>
+          {m.quantity > 0 ? '+' : ''}{m.quantity}
+        </span>
+      ),
+    },
+    { key: 'orderId', header: 'Order', render: (m) => (m.orderId ? `O-${m.orderId}` : '-') },
+  ]
+
+  return (
+    <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-sm text-muted-foreground">Total products</p>
-          <p className="text-2xl font-semibold">{products.length}</p>
-        </div>
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-sm text-muted-foreground">Low stock items</p>
-          <p className={'text-2xl font-semibold ' + (lowCount > 0 ? 'text-red-600' : 'text-green-600')}>{lowCount}</p>
-        </div>
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-sm text-muted-foreground">Total purchase spend</p>
-          <p className="text-2xl font-semibold">Rs {totalSpend.toLocaleString('en-IN')}</p>
-        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Total products</p>
+            <p className="text-2xl font-semibold">{products.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Low stock items</p>
+            <p className={'text-2xl font-semibold ' + (lowCount > 0 ? 'text-destructive' : 'text-green-700')}>{lowCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Purchase spend (recent)</p>
+            <p className="text-2xl font-semibold">{rupees(totalSpend)}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search product..."
-          className="rounded border bg-white p-2 w-64"
-        />
-        <label className="flex items-center gap-2">
+        <div className="relative w-full max-w-xs">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search product" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} />
           Show low stock only
         </label>
       </div>
 
-      <div className="rounded-lg border bg-white overflow-x-auto">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b">
-              <th className="p-3">Product</th>
-              <th className="p-3">In stock</th>
-              <th className="p-3">Minimum</th>
-              <th className="p-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleProducts.length === 0 && (
-              <tr><td className="p-3 text-muted-foreground" colSpan={4}>No products match.</td></tr>
-            )}
-            {visibleProducts.map((p) => {
-              const low = p.quantity < p.minimum
-              return (
-                <tr key={p.id} className="border-b last:border-0">
-                  <td className="p-3">{p.name}</td>
-                  <td className="p-3">{p.quantity}</td>
-                  <td className="p-3">{p.minimum}</td>
-                  <td className="p-3">
-                    {low ? (
-                      <span className="rounded-full bg-red-100 px-2 py-1 text-sm text-red-700">Low stock</span>
-                    ) : (
-                      <span className="rounded-full bg-green-100 px-2 py-1 text-sm text-green-700">OK</span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={stockColumns} data={visible} loading={loading} error={loadError} emptyMessage="No products match" />
 
-      <form onSubmit={handleSubmit} className="rounded-lg border bg-white p-4 space-y-3">
-        <h2 className="text-lg font-semibold">Add purchase</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <select name="productId" value={form.productId} onChange={handleChange} className="rounded border p-2">
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <input name="supplier" value={form.supplier} onChange={handleChange} placeholder="Supplier" className="rounded border p-2" />
-          <input name="quantity" type="number" value={form.quantity} onChange={handleChange} placeholder="Quantity" className="rounded border p-2" />
-          <input name="cost" type="number" value={form.cost} onChange={handleChange} placeholder="Total cost (Rs)" className="rounded border p-2" />
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button type="submit" className="rounded bg-amber-400 px-4 py-2 font-medium">Save purchase</button>
-      </form>
+      {canBuy && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Add purchase</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submit} className="max-w-2xl space-y-4" noValidate>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="productId">Product</Label>
+                  <select id="productId" name="productId" className={selectClass} value={form.productId} onChange={change}>
+                    <option value="">Select</option>
+                    {products.map((p) => (
+                      <option key={p.productId} value={p.productId}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="supplierId">Supplier</Label>
+                  <select id="supplierId" name="supplierId" className={selectClass} value={form.supplierId} onChange={change}>
+                    <option value="">Select</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}{s.city ? `, ${s.city}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input id="quantity" name="quantity" type="number" min="1" value={form.quantity} onChange={change} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="unitCost">Cost per unit (Rs)</Label>
+                  <Input id="unitCost" name="unitCost" type="number" min="0" value={form.unitCost} onChange={change} />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">Total cost: <span className="font-medium text-foreground">{rupees(total)}</span></p>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save purchase'}</Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="rounded-lg border bg-white overflow-x-auto">
-        <div className="flex items-center justify-between p-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Stock movement history</h2>
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={history.length === 0}
-            className="rounded border px-3 py-1 text-sm font-medium disabled:opacity-50"
-          >
-            Download CSV
-          </button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={movements.length === 0}>
+            <Download className="mr-2 h-4 w-4" /> Download CSV
+          </Button>
         </div>
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b">
-              <th className="p-3">Date</th>
-              <th className="p-3">Product</th>
-              <th className="p-3">Supplier</th>
-              <th className="p-3">Qty added</th>
-              <th className="p-3">Cost (Rs)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 && (
-              <tr><td className="p-3 text-muted-foreground" colSpan={5}>No purchases yet.</td></tr>
-            )}
-            {history.map((h) => (
-              <tr key={h.id} className="border-b last:border-0">
-                <td className="p-3">{h.date}</td>
-                <td className="p-3">{h.product}</td>
-                <td className="p-3">{h.supplier}</td>
-                <td className="p-3">+{h.quantity}</td>
-                <td className="p-3">{h.cost}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable columns={movementColumns} data={movements} loading={loading} error={loadError} emptyMessage="No stock movements yet" />
       </div>
     </div>
   )
