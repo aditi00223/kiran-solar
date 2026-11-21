@@ -1,4 +1,4 @@
-\# Kiran Solar: Feature Tracker
+﻿\# Kiran Solar: Feature Tracker
 
 
 
@@ -44,7 +44,7 @@ Status values: TODO, IN PROGRESS, DONE
 
 | F17 | Technician pay | P1 + P2 | | TODO | |
 
-| F18 | Stock and purchases | P1 + P3 | | TODO | |
+| F18 | Stock and purchases | P1 + P3 | feature/F18-stock-purchases | IN PROGRESS | |
 
 | F19 | Public landing page | P1 + P3 | | TODO | |
 
