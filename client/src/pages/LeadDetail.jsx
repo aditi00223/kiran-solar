@@ -120,6 +120,8 @@ export default function LeadDetail() {
     )
   }
 
+  const canQuote = lead.status === 'SURVEY_APPROVED' || lead.status === 'QUOTED'
+
   return (
     <div className="space-y-6">
       <Link to="/leads" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -143,6 +145,19 @@ export default function LeadDetail() {
           <Detail label="Message">{lead.message}</Detail>
         </CardContent>
       </Card>
+
+      <div className="flex flex-wrap items-center gap-3">
+        {canQuote ? (
+          <Button onClick={() => navigate(`/quotes/new?leadId=${lead.id}`)}>Create quote</Button>
+        ) : (
+          <>
+            <Button disabled>Create quote</Button>
+            <p className="text-sm text-muted-foreground">
+              Survey not approved yet. The quote unlocks once the roof survey is approved.
+            </p>
+          </>
+        )}
+      </div>
 
       <Card>
         <CardHeader>

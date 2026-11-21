@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,16 +16,37 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import QuotePdf from '@/components/QuotePdf'
-import { mockLeads } from '@/lib/mockLeads'
-import { GST_RATE, getQuote, packageLabel, rupees } from '@/lib/mockPackages'
+
+const rupees = (n) => 'Rs ' + Number(n || 0).toLocaleString('en-IN')
 
 function Detail({ label, children }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{children}</p>
+      <p className="text-sm font-medium">{children || '-'}</p>
     </div>
   )
+}
+
+// Convert the API quote into the shape QuotePdf already understands
+function toPdfQuote(q) {
+  return {
+    id: q.id,
+    number: `Q-${q.id}`,
+    type: q.template?.name ?? '',
+    kw: '',
+    items: q.lines.map((l) => ({
+      name: l.description,
+      qty: l.quantity,
+      unit: 'pcs',
+      price: l.unitPrice,
+    })),
+    subtotal: q.totalAmount,
+    gst: 0,
+    total: q.totalAmount,
+    notes: q.notes,
+    createdAt: String(q.createdAt).slice(0, 10),
+  }
 }
 
 export default function QuoteView() {
@@ -33,21 +55,39 @@ export default function QuoteView() {
   const [quote, setQuote] = useState(null)
   const [lead, setLead] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [busy, setBusy] = useState('')
 
   useEffect(() => {
-    // TEMPORARY: replace with api.get(`/quotes/${id}`)
-    const timer = setTimeout(() => {
-      const found = getQuote(id)
-      setQuote(found)
-      setLead(found ? mockLeads.find((l) => l.id === found.leadId) ?? null : null)
-      setLoading(false)
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [id])
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const res = await api.get(`/quotes/${id}`)
+        if (cancelled) return
+        setQuote(res.data.data)
+        setLead(res.data.data.lead)
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setLoadError(err.response?.data?.error || 'Could not load this quote. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [id, navigate])
 
   async function makeBlob() {
-    return pdf(<QuotePdf quote={quote} lead={lead} />).toBlob()
+    return pdf(<QuotePdf quote={toPdfQuote(quote)} lead={lead} />).toBlob()
   }
 
   async function handleDownload() {
@@ -57,7 +97,7 @@ export default function QuoteView() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${quote.number}.pdf`
+      a.download = `Q-${quote.id}.pdf`
       a.click()
       URL.revokeObjectURL(url)
       toast.success('Quote PDF downloaded')
@@ -96,10 +136,10 @@ export default function QuoteView() {
     )
   }
 
-  if (!quote || !lead) {
+  if (loadError || !quote) {
     return (
       <div className="space-y-4">
-        <p className="text-muted-foreground">We could not find this quote.</p>
+        <p className="text-destructive">{loadError || 'We could not find this quote.'}</p>
         <Button variant="outline" onClick={() => navigate('/leads')}>Back to leads</Button>
       </div>
     )
@@ -107,13 +147,13 @@ export default function QuoteView() {
 
   return (
     <div className="space-y-6">
-      <Link to={`/leads/${lead.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> Back to {lead.name}
+      <Link to={`/leads/${lead?.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Back to {lead?.name}
       </Link>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-xl">Quote {quote.number}</CardTitle>
+          <CardTitle className="text-xl">Quote Q-{quote.id}</CardTitle>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handlePrint} disabled={busy !== ''}>
               <Printer className="mr-2 h-4 w-4" />
@@ -126,11 +166,12 @@ export default function QuoteView() {
           </div>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Detail label="Customer">{lead.name}</Detail>
-          <Detail label="Phone">{lead.phone}</Detail>
-          <Detail label="Address">{lead.address}</Detail>
-          <Detail label="Package">{packageLabel(quote.type, quote.kw)}</Detail>
-          <Detail label="Date">{quote.createdAt}</Detail>
+          <Detail label="Customer">{lead?.name}</Detail>
+          <Detail label="Phone">{lead?.phone}</Detail>
+          <Detail label="City">{lead?.city}</Detail>
+          <Detail label="Package">{quote.template?.name}</Detail>
+          <Detail label="Status">{quote.status}</Detail>
+          <Detail label="Date">{String(quote.createdAt).slice(0, 10)}</Detail>
         </CardContent>
       </Card>
 
@@ -149,21 +190,19 @@ export default function QuoteView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {quote.items.map((item, i) => (
-                <TableRow key={i}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell className="text-right">{item.qty} {item.unit}</TableCell>
-                  <TableCell className="text-right">{rupees(item.price)}</TableCell>
-                  <TableCell className="text-right">{rupees(item.qty * item.price)}</TableCell>
+              {quote.lines.map((l) => (
+                <TableRow key={l.id}>
+                  <TableCell className="font-medium">{l.description}</TableCell>
+                  <TableCell className="text-right">{l.quantity}</TableCell>
+                  <TableCell className="text-right">{rupees(l.unitPrice)}</TableCell>
+                  <TableCell className="text-right">{rupees(l.lineTotal)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
 
-          <div className="ml-auto mt-4 max-w-xs space-y-1 border-t pt-4 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{rupees(quote.subtotal)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">GST ({GST_RATE}%)</span><span>{rupees(quote.gst)}</span></div>
-            <div className="flex justify-between text-base font-semibold"><span>Total</span><span>{rupees(quote.total)}</span></div>
+          <div className="ml-auto mt-4 max-w-xs border-t pt-4 text-base font-semibold">
+            <div className="flex justify-between"><span>Total</span><span>{rupees(quote.totalAmount)}</span></div>
           </div>
         </CardContent>
       </Card>
