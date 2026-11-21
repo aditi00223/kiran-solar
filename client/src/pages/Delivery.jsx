@@ -1,34 +1,7 @@
 import { useState } from 'react'
 import { mockOrders } from '@/lib/mockOrders'
 import { mockLeads } from '@/lib/mockLeads'
-import { todayISO } from '@/lib/mockJobs'
-
-// Sample serials per order (same style as the Dispatch page).
-// warrantyYears is a sample value, change it if Kiran's policy differs.
-const UNITS = {
-  2: [
-    { serial: 'SP550-0003', product: 'Solar Panel 550W', warrantyYears: 25 },
-    { serial: 'SP550-0004', product: 'Solar Panel 550W', warrantyYears: 25 },
-    { serial: 'INV5K-0001', product: 'Off-Grid Inverter 5 kW', warrantyYears: 5 },
-    { serial: 'BAT150-0001', product: 'Battery 150Ah', warrantyYears: 5 },
-  ],
-  3: [
-    { serial: 'SP550-0005', product: 'Solar Panel 550W', warrantyYears: 25 },
-    { serial: 'SP550-0006', product: 'Solar Panel 550W', warrantyYears: 25 },
-    { serial: 'INV3K-0002', product: 'On-Grid Inverter 3 kW', warrantyYears: 5 },
-  ],
-}
-
-// Kept outside the component so it survives moving between pages
-const deliveries = {}
-
-function addYears(iso, years) {
-  const [y, m, d] = iso.split('-').map(Number)
-  const date = new Date(y + years, m - 1, d)
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${mm}-${dd}`
-}
+import { deliveries, deliver } from '@/lib/mockWarranty'
 
 export default function Delivery() {
   const [, setTick] = useState(0)
@@ -38,15 +11,7 @@ export default function Delivery() {
   const customerOf = (o) => mockLeads.find((l) => l.id === o.leadId)?.name ?? 'Unknown'
 
   function markDelivered(order) {
-    const date = todayISO()
-    deliveries[order.id] = {
-      date,
-      units: (UNITS[order.id] || []).map((u) => ({
-        ...u,
-        start: date,
-        end: addYears(date, u.warrantyYears),
-      })),
-    }
+    deliver(order.id)
     setOpenId(order.id)
     setTick((t) => t + 1)
   }
