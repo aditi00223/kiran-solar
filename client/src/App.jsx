@@ -15,6 +15,7 @@ import Schedule from '@/pages/Schedule'
 import Dashboard from '@/pages/Dashboard'
 import Subsidy from '@/pages/Subsidy'
 import SubsidyDetail from '@/pages/SubsidyDetail'
+import Payroll from '@/pages/Payroll'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -48,6 +49,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/subsidy" element={<Subsidy />} />
           <Route path="/subsidy/:id" element={<SubsidyDetail />} />
+          <Route path="/payroll" element={<Payroll />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
