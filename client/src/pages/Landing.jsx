@@ -1,19 +1,20 @@
-﻿import { useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check, ClipboardList, FileText, ShieldCheck, Sun, Wrench } from 'lucide-react'
+import api from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { GST_RATE, KW_SIZES, buildParts } from '@/lib/mockPackages'
 
-const rupees = (n) => 'Rs ' + n.toLocaleString('en-IN')
-const totalOf = (parts) => parts.reduce((sum, p) => sum + p.qty * p.price, 0)
+const rupees = (n) => 'Rs ' + Number(n || 0).toLocaleString('en-IN')
 
-const PACKAGES = [
-  { key: 'ON_GRID', title: 'On-Grid system', sized: true, text: 'Cut your electricity bill with panels connected to the grid.' },
-  { key: 'OFF_GRID', title: 'Off-Grid system', sized: true, text: 'Battery backup that keeps your home running during power cuts.' },
-  { key: 'PANEL_SET', title: 'Panel set', sized: false, text: 'Panels with mounting structure, ready for your own setup.' },
-  { key: 'INSTALLATION', title: 'Installation service', sized: false, text: 'Professional installation and commissioning by our crew.' },
-]
+const TYPE_LABEL = {
+  ON_GRID: 'On-Grid',
+  OFF_GRID: 'Off-Grid',
+  PANEL_SET: 'Panel set',
+  INSTALLATION: 'Installation',
+}
 
 const STEPS = [
   { icon: ClipboardList, title: 'Send an enquiry', text: 'Tell us about your home and your electricity use. It takes two minutes.' },
@@ -26,7 +27,39 @@ const quoteLink =
   'inline-flex items-center justify-center gap-2 rounded-md bg-amber-400 px-5 py-3 font-semibold text-slate-900 hover:bg-amber-300'
 
 export default function Landing() {
-  const [kw, setKw] = useState(3)
+  const [packages, setPackages] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [kw, setKw] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.get('/packages')
+      const list = res.data.data
+      setPackages(list)
+      const sizes = [...new Set(list.map((p) => p.capacityKw).filter(Boolean))].sort((a, b) => a - b)
+      setKw((current) => current ?? (sizes.includes(3) ? 3 : sizes[0] ?? null))
+    } catch (err) {
+      setError(err.response?.data?.error || 'We could not load the packages right now. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  // Sizes come from the data, so a new package size shows up without a code change
+  const sizes = useMemo(
+    () => [...new Set(packages.map((p) => p.capacityKw).filter(Boolean))].sort((a, b) => a - b),
+    [packages]
+  )
+
+  // Packages without a size (panel set, installation) always show
+  const visible = packages.filter((p) => !p.capacityKw || p.capacityKw === kw)
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -75,54 +108,86 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-4">
           <h2 className="text-2xl font-bold sm:text-3xl">Our packages</h2>
           <p className="mt-2 text-slate-600">
-            Prices are shown before GST ({GST_RATE}%). The final price is confirmed in your quote after the site survey.
+            These are starting prices. The final price is confirmed in your quote after the site survey.
           </p>
 
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-slate-600">System size:</span>
-            {KW_SIZES.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => setKw(size)}
-                className={
-                  'rounded-md border px-3 py-1 text-sm font-medium ' +
-                  (kw === size ? 'border-amber-400 bg-amber-400 text-slate-900' : 'bg-white hover:bg-slate-100')
-                }
-              >
-                {size} kW
-              </button>
-            ))}
-          </div>
+          {loading && (
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-56 w-full" />
+              ))}
+            </div>
+          )}
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PACKAGES.map((p) => {
-              const parts = buildParts(p.key, kw)
-              return (
-                <Card key={p.key} className="flex flex-col">
-                  <CardHeader>
-                    <CardTitle>{p.title}{p.sized ? ' ' + kw + ' kW' : ''}</CardTitle>
-                    <CardDescription>{p.text}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-1 flex-col gap-3">
-                    <p className="text-2xl font-bold">{rupees(totalOf(parts))}</p>
-                    <ul className="space-y-1 text-sm text-slate-600">
-                      {parts.slice(0, 4).map((part) => (
-                        <li key={part.name} className="flex gap-2">
-                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                          <span>{part.qty} {part.unit} {part.name}</span>
-                        </li>
-                      ))}
-                      {parts.length > 4 && <li className="pl-6">and {parts.length - 4} more items</li>}
-                    </ul>
-                    <Link to="/enquiry" className="mt-auto text-sm font-semibold text-amber-600 hover:underline">
-                      Ask about this package
-                    </Link>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+          {!loading && error && (
+            <div className="mt-6 space-y-3 rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm text-red-700">{error}</p>
+              <Button size="sm" variant="outline" onClick={load}>Try again</Button>
+            </div>
+          )}
+
+          {!loading && !error && packages.length === 0 && (
+            <p className="mt-6 text-sm text-slate-600">
+              Our packages will be listed here soon. <Link to="/enquiry" className="font-semibold text-amber-600 hover:underline">Send an enquiry</Link> and we will call you.
+            </p>
+          )}
+
+          {!loading && !error && packages.length > 0 && (
+            <>
+              {sizes.length > 0 && (
+                <div className="mt-6 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-slate-600">System size:</span>
+                  {sizes.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setKw(size)}
+                      className={
+                        'rounded-md border px-3 py-1 text-sm font-medium ' +
+                        (kw === size ? 'border-amber-400 bg-amber-400 text-slate-900' : 'bg-white hover:bg-slate-100')
+                      }
+                    >
+                      {size} kW
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {visible.map((p) => (
+                  <Card key={p.id} className="flex flex-col">
+                    <CardHeader>
+                      <Badge variant="secondary" className="w-fit">{TYPE_LABEL[p.type] ?? p.type}</Badge>
+                      <CardTitle className="pt-2">{p.name}</CardTitle>
+                      <CardDescription>{p.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-1 flex-col gap-3">
+                      <p className="text-2xl font-bold">{rupees(p.price)}</p>
+                      {p.warranty && (
+                        <ul className="space-y-1 text-sm text-slate-600">
+                          {p.warranty.panelsYears > 0 && (
+                            <li className="flex gap-2">
+                              <Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                              <span>{p.warranty.panelsYears} years warranty on panels</span>
+                            </li>
+                          )}
+                          {p.warranty.inverterYears > 0 && (
+                            <li className="flex gap-2">
+                              <Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                              <span>{p.warranty.inverterYears} years warranty on inverter</span>
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                      <Link to="/enquiry" className="mt-auto text-sm font-semibold text-amber-600 hover:underline">
+                        Ask about this package
+                      </Link>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
 
