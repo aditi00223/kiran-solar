@@ -11,6 +11,9 @@ const userRoutes = require("./routes/users");
 const packageRoutes = require("./routes/packages");
 const quoteRoutes = require("./routes/quotes");
 const orderRoutes = require("./routes/orders");
+const dispatchRoutes = require("./routes/dispatch");
+const installJobRoutes = require("./routes/installJobs");
+const supportRoutes = require("./routes/support");
 
 const app = express();
 
@@ -30,6 +33,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/packages", packageRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/install-jobs", installJobRoutes);
+app.use("/api", dispatchRoutes);
+app.use("/api", supportRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
