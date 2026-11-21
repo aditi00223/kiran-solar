@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/sonner'
 import Login from '@/pages/Login'
 import Enquiry from '@/pages/Enquiry'
 import Leads from '@/pages/Leads'
+import LeadDetail from '@/pages/LeadDetail'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -24,6 +25,7 @@ function App() {
         <Route path="/enquiry" element={<Enquiry />} />
         <Route element={<AppLayout />}>
           <Route path="/leads" element={<Leads />} />
+          <Route path="/leads/:id" element={<LeadDetail />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>

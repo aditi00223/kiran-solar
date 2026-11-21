@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import DataTable from '@/components/DataTable'
@@ -16,6 +17,7 @@ const selectClass =
   'h-9 rounded-lg border border-input bg-transparent px-3 text-sm'
 
 export default function Leads() {
+  const navigate = useNavigate()
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -86,6 +88,7 @@ export default function Leads() {
         loading={loading}
         error={error}
         emptyMessage="No leads yet"
+        onRowClick={(lead) => navigate(`/leads/${lead.id}`)}
       />
     </div>
   )
