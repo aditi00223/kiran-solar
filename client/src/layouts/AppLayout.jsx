@@ -27,6 +27,8 @@ const MENU = [
   { label: 'Orders', to: '/orders', icon: ShoppingCart, roles: ['SALES'] },
   { label: 'Warehouse', to: '/warehouse', icon: Warehouse, roles: ['WAREHOUSE'] },
   { label: 'Dispatch', to: '/dispatch', icon: ScanLine, roles: ['WAREHOUSE'] },
+  { label: 'Delivery', to: '/delivery', icon: Package, roles: ['WAREHOUSE'] },
+  { label: 'Install', to: '/install', icon: ClipboardCheck, roles: ['TECHNICIAN'] },
   { label: 'Stock', to: '/stock', icon: Package,roles: ['WAREHOUSE', 'SALES', 'DIRECTOR'] },
   { label: 'Schedule', to: '/schedule', icon: CalendarDays, roles: ['SALES', 'TECHNICIAN'] },
   { label: 'Subsidy', to: '/subsidy', icon: Landmark, roles: ['SALES', 'DIRECTOR'] },
