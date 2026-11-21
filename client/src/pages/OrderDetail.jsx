@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
@@ -43,57 +43,65 @@ export default function OrderDetail() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get(`/orders/${id}`)
+      setOrder(res.data.data)
       setLoadError(null)
-      try {
-        const res = await api.get(`/orders/${id}`)
-        if (!cancelled) setOrder(res.data.data)
-      } catch (err) {
-        if (cancelled) return
-        if (err.response?.status === 401) {
-          localStorage.clear()
-          navigate('/login')
-          return
-        }
-        setLoadError(err.response?.data?.error || 'Could not load this order. Please try again.')
-      } finally {
-        if (!cancelled) setLoading(false)
+    } catch (err) {
+      if (err.response?.status === 401) {
+        localStorage.clear()
+        navigate('/login')
+        return
       }
-    }
-    load()
-    return () => {
-      cancelled = true
+      setLoadError(err.response?.data?.error || 'Could not load this order. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }, [id, navigate])
+
+  useEffect(() => {
+    setLoading(true)
+    load()
+  }, [load])
 
   async function handlePayment(e) {
     e.preventDefault()
     setError('')
     const value = Number(amount)
+    const due = Number(order.balance)
     if (!value || value <= 0) {
       setError('Enter the amount received')
       return
     }
+    // Stop an overpayment here, before it reaches the server
+    if (value > due) {
+      setError(`The amount is more than the balance due (${rupees(due)})`)
+      return
+    }
     setSaving(true)
     try {
-      const res = await api.post(`/orders/${id}/payments`, {
+      await api.post(`/orders/${id}/payments`, {
         amount: value,
-        type: value >= Number(order.balance) ? 'FULL' : 'BALANCE',
+        type: value >= due ? 'FULL' : 'BALANCE',
         method,
       })
-      setOrder((prev) => ({ ...prev, ...res.data.data }))
-      // reload for the full payment list
-      const fresh = await api.get(`/orders/${id}`)
-      setOrder(fresh.data.data)
-      toast.success('Payment recorded')
-      setAmount('')
     } catch (err) {
       const message = err.response?.data?.error || 'Could not record the payment. Please try again.'
       setError(message)
       toast.error(message)
+      setSaving(false)
+      return
+    }
+
+    // The payment is saved. Reload the order so the totals and the list are correct.
+    setAmount('')
+    try {
+      const fresh = await api.get(`/orders/${id}`)
+      setOrder(fresh.data.data)
+      toast.success('Payment recorded')
+    } catch {
+      toast.warning('Payment recorded, but the page could not refresh. Reload the page to see it.')
     } finally {
       setSaving(false)
     }
@@ -203,6 +211,7 @@ export default function OrderDetail() {
                   id="amount"
                   type="number"
                   min="0"
+                  max={balance}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                 />
@@ -230,7 +239,9 @@ export default function OrderDetail() {
           </CardContent>
         </Card>
       ) : (
-        <p className="text-sm text-muted-foreground">This order is paid in full.</p>
+        <p className="text-sm text-muted-foreground">
+          {balance < 0 ? 'This order has been overpaid. Please check the payments above.' : 'This order is paid in full.'}
+        </p>
       )}
     </div>
   )
