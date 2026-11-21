@@ -14,9 +14,16 @@ export default function Stock() {
   const [history, setHistory] = useState([])
   const [form, setForm] = useState({ productId: '1', supplier: '', quantity: '', cost: '' })
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [onlyLow, setOnlyLow] = useState(false)
 
   const lowCount = products.filter((p) => p.quantity < p.minimum).length
   const totalSpend = history.reduce((sum, h) => sum + h.cost, 0)
+  const visibleProducts = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) &&
+      (!onlyLow || p.quantity < p.minimum)
+  )
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -67,6 +74,19 @@ export default function Stock() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-4">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search product..."
+          className="rounded border bg-white p-2 w-64"
+        />
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} />
+          Show low stock only
+        </label>
+      </div>
+
       <div className="rounded-lg border bg-white overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -78,7 +98,10 @@ export default function Stock() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => {
+            {visibleProducts.length === 0 && (
+              <tr><td className="p-3 text-muted-foreground" colSpan={4}>No products match.</td></tr>
+            )}
+            {visibleProducts.map((p) => {
               const low = p.quantity < p.minimum
               return (
                 <tr key={p.id} className="border-b last:border-0">
