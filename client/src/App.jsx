@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
+import Landing from '@/pages/Landing'
 import Login from '@/pages/Login'
 import Enquiry from '@/pages/Enquiry'
 import Leads from '@/pages/Leads'
@@ -20,8 +21,8 @@ import AppLayout from '@/layouts/AppLayout'
 import Stock from '@/pages/Stock'
 import Dispatch from '@/pages/Dispatch'
 import Delivery from '@/pages/Delivery'
-import Install from '@/pages/Install'
 import Tickets from '@/pages/Tickets'
+
 // Temporary page for routes we haven't built yet
 function ComingSoon() {
   const { pathname } = useLocation()
@@ -36,7 +37,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/enquiry" element={<Enquiry />} />
         <Route element={<AppLayout />}>
@@ -45,7 +46,6 @@ function App() {
           <Route path="/stock" element={<Stock />} />
           <Route path="/dispatch" element={<Dispatch />} />
           <Route path="/delivery" element={<Delivery />} />
-          <Route path="/install" element={<Install />} />
           <Route path="/tickets" element={<Tickets />} />
           <Route path="/surveys" element={<Surveys />} />
           <Route path="/surveys/:id" element={<SurveyDetail />} />
