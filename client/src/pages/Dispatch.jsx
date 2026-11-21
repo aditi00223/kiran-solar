@@ -30,9 +30,17 @@ export default function Dispatch() {
         api.get('/orders', { params: { status: 'PACKED', limit: 50 } }),
         api.get('/orders', { params: { status: 'DISPATCHED', limit: 50 } }),
       ])
-      const waiting = [...a.data.data, ...b.data.data]
+      const dispatchedList = c.data.data
+      const dispatchedIds = new Set(dispatchedList.map((o) => o.id))
+      const seen = new Set()
+      const waiting = [...a.data.data, ...b.data.data].filter((o) => {
+        if (dispatchedIds.has(o.id) || seen.has(o.id)) return false
+        if (o.status && !['CONFIRMED', 'PACKED'].includes(o.status)) return false
+        seen.add(o.id)
+        return true
+      })
       setOrders(waiting)
-      setDispatched(c.data.data)
+      setDispatched(dispatchedList)
       setOrderId((current) =>
         current && waiting.some((o) => String(o.id) === current) ? current : waiting[0] ? String(waiting[0].id) : ''
       )
