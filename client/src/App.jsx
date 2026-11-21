@@ -18,6 +18,7 @@ import SubsidyDetail from '@/pages/SubsidyDetail'
 import Payroll from '@/pages/Payroll'
 import AppLayout from '@/layouts/AppLayout'
 import Stock from '@/pages/Stock'
+import Dispatch from '@/pages/Dispatch'
 
 // Temporary page for routes we haven't built yet
 function ComingSoon() {
@@ -40,6 +41,7 @@ function App() {
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
           <Route path="/stock" element={<Stock />} />
+          <Route path="/dispatch" element={<Dispatch />} />
           <Route path="/surveys" element={<Surveys />} />
           <Route path="/surveys/:id" element={<SurveyDetail />} />
           <Route path="/quotes/new" element={<QuoteNew />} />
