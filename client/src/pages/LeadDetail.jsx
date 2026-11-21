@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import FormField from '@/components/FormField'
 import StatusBadge from '@/components/StatusBadge'
-import SurveySection from '@/components/SurveySection'
-import { mockLeads } from '@/lib/mockLeads'
 
 const SOURCE_LABEL = { WEB: 'Website', CALL: 'Phone call', WHATSAPP: 'WhatsApp' }
 
@@ -17,9 +16,17 @@ function Detail({ label, children }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{children}</p>
+      <p className="text-sm font-medium">{children || '-'}</p>
     </div>
   )
+}
+
+function fillForm(lead) {
+  return {
+    shadowFreeArea: lead.shadowFreeArea != null ? String(lead.shadowFreeArea) : '',
+    monthlyBill: lead.monthlyBill != null ? String(lead.monthlyBill) : '',
+    gridSuitable: lead.gridSuitable == null ? '' : lead.gridSuitable ? 'yes' : 'no',
+  }
 }
 
 export default function LeadDetail() {
@@ -27,26 +34,38 @@ export default function LeadDetail() {
   const navigate = useNavigate()
   const [lead, setLead] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [form, setForm] = useState({ shadowFreeArea: '', monthlyBill: '', gridSuitable: '' })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // TEMPORARY: replace with api.get(`/leads/${id}`)
-    const timer = setTimeout(() => {
-      const found = mockLeads.find((l) => String(l.id) === id) ?? null
-      setLead(found)
-      if (found?.callCheck) {
-        setForm({
-          shadowFreeArea: String(found.callCheck.shadowFreeArea),
-          monthlyBill: String(found.callCheck.monthlyBill),
-          gridSuitable: found.callCheck.gridSuitable ? 'yes' : 'no',
-        })
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const res = await api.get(`/leads/${id}`)
+        if (cancelled) return
+        setLead(res.data.data)
+        setForm(fillForm(res.data.data))
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setLoadError(err.response?.data?.error || 'Could not load this lead. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setLoading(false)
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [id])
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [id, navigate])
 
   function set(field) {
     return (e) => setForm({ ...form, [field]: e.target.value })
@@ -54,7 +73,7 @@ export default function LeadDetail() {
 
   function validate() {
     const next = {}
-    if (!form.shadowFreeArea || Number(form.shadowFreeArea) <= 0) next.shadowFreeArea = 'Enter the shadow-free area in square metres'
+    if (!form.shadowFreeArea || Number(form.shadowFreeArea) <= 0) next.shadowFreeArea = 'Enter the shadow-free roof area'
     if (!form.monthlyBill || Number(form.monthlyBill) <= 0) next.monthlyBill = 'Enter the monthly bill in rupees'
     if (!form.gridSuitable) next.gridSuitable = 'Choose yes or no'
     return next
@@ -68,11 +87,15 @@ export default function LeadDetail() {
 
     setSaving(true)
     try {
-      // TEMPORARY: replace with api.put(`/leads/${id}/call-check`, ...)
-      await new Promise((r) => setTimeout(r, 500))
+      const res = await api.patch(`/leads/${id}/call-check`, {
+        shadowFreeArea: Number(form.shadowFreeArea),
+        monthlyBill: Number(form.monthlyBill),
+        gridSuitable: form.gridSuitable === 'yes',
+      })
+      setLead(res.data.data)
       toast.success('Call check saved')
-    } catch {
-      toast.error('Could not save the call check. Please try again.')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not save the call check. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -88,10 +111,10 @@ export default function LeadDetail() {
     )
   }
 
-  if (!lead) {
+  if (loadError || !lead) {
     return (
       <div className="space-y-4">
-        <p className="text-muted-foreground">We could not find this lead.</p>
+        <p className="text-destructive">{loadError || 'We could not find this lead.'}</p>
         <Button variant="outline" onClick={() => navigate('/leads')}>Back to leads</Button>
       </div>
     )
@@ -110,11 +133,14 @@ export default function LeadDetail() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Detail label="Phone">{lead.phone}</Detail>
+          <Detail label="Email">{lead.email}</Detail>
           <Detail label="City">{lead.city}</Detail>
           <Detail label="Address">{lead.address}</Detail>
-          <Detail label="System size wanted">{lead.systemSize} kW</Detail>
-          <Detail label="Source">{SOURCE_LABEL[lead.source]}</Detail>
-          <Detail label="Received">{lead.createdAt}</Detail>
+          <Detail label="System size wanted">{lead.systemSizeKw ? `${lead.systemSizeKw} kW` : ''}</Detail>
+          <Detail label="Source">{SOURCE_LABEL[lead.source] ?? lead.source}</Detail>
+          <Detail label="Assigned to">{lead.assignedTo?.name}</Detail>
+          <Detail label="Received">{String(lead.createdAt).slice(0, 10)}</Detail>
+          <Detail label="Message">{lead.message}</Detail>
         </CardContent>
       </Card>
 
@@ -125,12 +151,13 @@ export default function LeadDetail() {
         <CardContent>
           <form onSubmit={handleSave} className="max-w-md space-y-4" noValidate>
             <FormField
-              label="Shadow-free roof area (sq m)"
+              label="Shadow-free roof area (sq ft)"
               name="shadowFreeArea"
               type="number"
               value={form.shadowFreeArea}
               onChange={set('shadowFreeArea')}
               error={errors.shadowFreeArea}
+              hint="Area of the roof that gets no shade during the day"
             />
             <FormField
               label="Monthly electricity bill (Rs)"
@@ -160,8 +187,6 @@ export default function LeadDetail() {
           </form>
         </CardContent>
       </Card>
-
-      <SurveySection lead={lead} onChange={() => setLead({ ...lead })} />
     </div>
   )
 }
