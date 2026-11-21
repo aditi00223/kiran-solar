@@ -2,10 +2,11 @@ const express = require("express");
 const { z } = require("zod");
 const { ok, fail } = require("../utils/response");
 const { authenticate, requireRole } = require("../middleware/auth");
+const prisma = require("../lib/prisma");
 
 const router = express.Router();
 
-// ---------- STUB: fake data, replaced with real database logic in Steps 7 and 9 ----------
+// ---------- STUB: fake data, replaced with real database logic in Step 9 ----------
 
 const sampleQuote = {
   id: 4,
@@ -44,15 +45,18 @@ const updateQuoteSchema = z.object({
 });
 
 // POST /api/quotes
-router.post("/", authenticate, requireRole("SALES"), (req, res, next) => {
+router.post("/", authenticate, requireRole("SALES"), async (req, res, next) => {
   try {
     const body = createQuoteSchema.parse(req.body);
 
-    // STUB ONLY: lead 1 has no approved survey, so this shows the real error
-    if (body.leadId === 1) {
-      return fail(res, 403, "Survey not approved yet");
-    }
+    // The survey gate (F5): no approved survey, no quote
+    const lead = await prisma.lead.findUnique({ where: { id: body.leadId }, select: { id: true } });
+    if (!lead) return fail(res, 404, "Record not found");
 
+    const approved = await prisma.survey.count({ where: { leadId: body.leadId, status: "APPROVED" } });
+    if (approved === 0) return fail(res, 403, "Survey not approved yet");
+
+    // Still a stub below: the real quote is saved in Step 9
     return ok(res, { ...sampleQuote, notes: body.notes || null }, 201);
   } catch (err) {
     next(err);
