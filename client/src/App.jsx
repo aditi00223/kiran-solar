@@ -1,11 +1,29 @@
-import { Button } from '@/components/ui/button'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Toaster } from '@/components/ui/sonner'
+import Login from '@/pages/Login'
+
+// Temporary page for routes we haven't built yet
+function ComingSoon() {
+  const { pathname } = useLocation()
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <p className="text-muted-foreground">
+        Page <span className="font-semibold text-foreground">{pathname}</span> is coming soon.
+      </p>
+    </div>
+  )
+}
 
 function App() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-slate-900">
-      <h1 className="text-4xl font-bold text-amber-400">Kiran is live</h1>
-      <Button>Get a free quote</Button>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<ComingSoon />} />
+      </Routes>
+      <Toaster richColors position="top-right" />
+    </BrowserRouter>
   )
 }
 
