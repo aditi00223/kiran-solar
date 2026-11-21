@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '@/lib/api'
+import { Button } from '@/components/ui/button'
 import DataTable from '@/components/DataTable'
 import SurveyBadge from '@/components/SurveyBadge'
-import { mockLeads } from '@/lib/mockLeads'
-import { mockSurveys } from '@/lib/mockSurveys'
 
 const STATUS_OPTIONS = [
   { value: 'SCHEDULED', label: 'Scheduled' },
@@ -16,39 +16,48 @@ export default function Surveys() {
   const navigate = useNavigate()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error] = useState(null)
+  const [error, setError] = useState(null)
   const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
+  const [meta, setMeta] = useState({ totalPages: 1, total: 0 })
 
   useEffect(() => {
-    // TEMPORARY: replace with api.get('/surveys')
-    const timer = setTimeout(() => {
-      const joined = mockSurveys
-        .map((s) => {
-          const lead = mockLeads.find((l) => l.id === s.leadId)
-          return {
-            id: s.id,
-            name: lead?.name ?? 'Unknown customer',
-            city: lead?.city ?? '',
-            technician: s.technician,
-            scheduledDate: s.scheduledDate,
-            status: s.status,
-          }
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await api.get('/surveys', {
+          params: { page, limit: 10, status: status || undefined },
         })
-        .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
-      setRows(joined)
-      setLoading(false)
-    }, 600)
-    return () => clearTimeout(timer)
-  }, [])
+        if (cancelled) return
+        setRows(res.data.data)
+        setMeta(res.data.meta)
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setError(err.response?.data?.error || 'Could not load surveys. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [page, status, navigate])
 
-  const filtered = useMemo(() => rows.filter((r) => !status || r.status === status), [rows, status])
   const waiting = rows.filter((r) => r.status === 'COMPLETED').length
 
   const columns = [
-    { key: 'name', header: 'Customer', render: (r) => <span className="font-medium">{r.name}</span> },
-    { key: 'city', header: 'City' },
-    { key: 'technician', header: 'Technician' },
-    { key: 'scheduledDate', header: 'Survey date' },
+    { key: 'name', header: 'Customer', render: (r) => <span className="font-medium">{r.lead?.name}</span> },
+    { key: 'city', header: 'City', render: (r) => r.lead?.city },
+    { key: 'technician', header: 'Technician', render: (r) => r.technician?.name },
+    { key: 'scheduledAt', header: 'Survey date', render: (r) => String(r.scheduledAt).slice(0, 10) },
     { key: 'status', header: 'Status', render: (r) => <SurveyBadge status={r.status} /> },
   ]
 
@@ -58,7 +67,7 @@ export default function Surveys() {
         <select
           className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => { setStatus(e.target.value); setPage(1) }}
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((o) => (
@@ -67,19 +76,29 @@ export default function Surveys() {
         </select>
         {!loading && waiting > 0 && (
           <p className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{waiting}</span> survey{waiting > 1 ? 's' : ''} waiting for your approval
+            <span className="font-semibold text-foreground">{waiting}</span> survey{waiting > 1 ? 's' : ''} waiting for approval on this page
           </p>
         )}
       </div>
 
       <DataTable
         columns={columns}
-        data={filtered}
+        data={rows}
         loading={loading}
         error={error}
         emptyMessage="No surveys yet"
         onRowClick={(row) => navigate(`/surveys/${row.id}`)}
       />
+
+      {!error && meta.totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Page {page} of {meta.totalPages} ({meta.total} surveys)</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+            <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
