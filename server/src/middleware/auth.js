@@ -38,4 +38,15 @@ function requireRole(...allowedRoles) {
   };
 }
 
-module.exports = { authenticate, requireRole };
+
+// Optional login: if a token is sent it must be valid, but no token is fine.
+// Used by public routes that behave differently for logged-in staff.
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Bearer ")) {
+    return next();
+  }
+  return authenticate(req, res, next);
+}
+
+module.exports = { authenticate, optionalAuth, requireRole };
