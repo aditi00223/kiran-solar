@@ -12,6 +12,7 @@ import Orders from '@/pages/Orders'
 import OrderDetail from '@/pages/OrderDetail'
 import Warehouse from '@/pages/Warehouse'
 import Schedule from '@/pages/Schedule'
+import Dashboard from '@/pages/Dashboard'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -42,6 +43,7 @@ function App() {
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/warehouse" element={<Warehouse />} />
           <Route path="/schedule" element={<Schedule />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
