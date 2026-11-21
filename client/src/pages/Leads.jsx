@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import DataTable from '@/components/ui/DataTable'
-import StatusBadge from '@/components/ui/StatusBadge'
+import DataTable from '@/components/DataTable'
+import StatusBadge from '@/components/StatusBadge'
 import { mockLeads } from '@/lib/mockLeads'
 
 const SOURCE_LABEL = { WEB: 'Website', CALL: 'Phone call', WHATSAPP: 'WhatsApp' }
