@@ -4,6 +4,8 @@ import Login from '@/pages/Login'
 import Enquiry from '@/pages/Enquiry'
 import Leads from '@/pages/Leads'
 import LeadDetail from '@/pages/LeadDetail'
+import Surveys from '@/pages/Surveys'
+import SurveyDetail from '@/pages/SurveyDetail'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -26,6 +28,8 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
+          <Route path="/surveys" element={<Surveys />} />
+          <Route path="/surveys/:id" element={<SurveyDetail />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>

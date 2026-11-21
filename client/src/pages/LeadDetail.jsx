@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import FormField from '@/components/FormField'
 import StatusBadge from '@/components/StatusBadge'
+import SurveySection from '@/components/SurveySection'
 import { mockLeads } from '@/lib/mockLeads'
 
 const SOURCE_LABEL = { WEB: 'Website', CALL: 'Phone call', WHATSAPP: 'WhatsApp' }
@@ -159,6 +160,8 @@ export default function LeadDetail() {
           </form>
         </CardContent>
       </Card>
+
+      <SurveySection lead={lead} onChange={() => setLead({ ...lead })} />
     </div>
   )
 }
