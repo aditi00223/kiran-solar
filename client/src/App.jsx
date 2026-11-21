@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import Login from '@/pages/Login'
+import Leads from '@/pages/Leads'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -20,6 +21,7 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route element={<AppLayout />}>
+          <Route path="/leads" element={<Leads />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
