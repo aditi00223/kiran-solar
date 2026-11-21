@@ -20,6 +20,7 @@ import AppLayout from '@/layouts/AppLayout'
 import Stock from '@/pages/Stock'
 import Dispatch from '@/pages/Dispatch'
 import Delivery from '@/pages/Delivery'
+import Install from '@/pages/Install'
 // Temporary page for routes we haven't built yet
 function ComingSoon() {
   const { pathname } = useLocation()
@@ -43,6 +44,7 @@ function App() {
           <Route path="/stock" element={<Stock />} />
           <Route path="/dispatch" element={<Dispatch />} />
           <Route path="/delivery" element={<Delivery />} />
+          <Route path="/install" element={<Install />} />
           <Route path="/surveys" element={<Surveys />} />
           <Route path="/surveys/:id" element={<SurveyDetail />} />
           <Route path="/quotes/new" element={<QuoteNew />} />
