@@ -5,6 +5,7 @@ import Enquiry from '@/pages/Enquiry'
 import Leads from '@/pages/Leads'
 import LeadDetail from '@/pages/LeadDetail'
 import AppLayout from '@/layouts/AppLayout'
+import Stock from '@/pages/Stock'
 
 // Temporary page for routes we haven't built yet
 function ComingSoon() {
@@ -26,6 +27,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
+          <Route path="/stock" element={<Stock />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
