@@ -1,0 +1,541 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Fixed-choice lists (enums) ----------
+// Why: stops typos. A lead status can only be one of these values.
+
+enum Role {
+  SALES
+  TECHNICIAN
+  WAREHOUSE
+  SUPPORT
+  DIRECTOR
+}
+
+enum LeadSource {
+  WEB
+  CALL
+  WHATSAPP
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  SURVEY_SCHEDULED
+  SURVEY_APPROVED
+  QUOTED
+  ORDERED
+  LOST
+}
+
+enum SurveyStatus {
+  SCHEDULED
+  COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum PackageType {
+  ON_GRID
+  OFF_GRID
+  PANEL_SET
+  INSTALLATION
+}
+
+enum ProductCategory {
+  PANEL
+  INVERTER
+  BATTERY
+  CONTROLLER
+  STAND
+  WIRING
+  EARTHING
+  SWITCH
+  SERVICE
+  OTHER
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  INSTALLED
+}
+
+enum PaymentType {
+  ADVANCE
+  FULL
+  BALANCE
+}
+
+enum JobStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  FIXED_PENDING_CONFIRMATION
+  CLOSED
+}
+
+enum SubsidyStage {
+  APPLIED
+  DOCUMENTS_SUBMITTED
+  APPROVED
+  RECEIVED
+}
+
+enum MovementType {
+  PURCHASE
+  DISPATCH
+  ADJUSTMENT
+}
+
+enum InvoiceType {
+  ORDER
+  SERVICE
+}
+
+// ---------- User ----------
+// Why: staff who log in. The role decides what they can do.
+// payRate is the hourly pay, used only for technicians (F17).
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         Role
+  payRate      Decimal? @db.Decimal(10, 2)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  leads        Lead[]
+  surveys      Survey[]
+  quotes       Quote[]
+  jobs         InstallJob[]
+  pays         TechnicianPay[]
+}
+
+// ---------- Lead ----------
+// Why: every enquiry (web, call, WhatsApp) lands here and is never deleted.
+// It also holds the call-check answers (F3) and acts as the customer record.
+
+model Lead {
+  id             Int        @id @default(autoincrement())
+  name           String
+  phone          String
+  email          String?
+  address        String
+  city           String?
+  source         LeadSource @default(WEB)
+  systemSizeKw   Float?
+  message        String?
+  status         LeadStatus @default(NEW)
+
+  // Call check (F3)
+  shadowFreeArea Float?     // square feet
+  monthlyBill    Int?       // rupees
+  gridSuitable   Boolean?
+
+  assignedToId   Int?
+  assignedTo     User?      @relation(fields: [assignedToId], references: [id])
+  surveys        Survey[]
+  quotes         Quote[]
+  orders         Order[]
+  
+  tickets        Ticket[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([phone])
+  @@index([status])
+}
+
+// ---------- Survey ----------
+// Why: the technician's roof visit. Records direction, tilt and cable distance.
+// The quote is blocked until a survey for the lead is APPROVED (F5).
+
+model Survey {
+  id            Int          @id @default(autoincrement())
+  leadId        Int
+  lead          Lead         @relation(fields: [leadId], references: [id])
+  technicianId  Int?
+  technician    User?        @relation(fields: [technicianId], references: [id])
+
+  scheduledAt   DateTime?
+  status        SurveyStatus @default(SCHEDULED)
+
+  roofDirection String?      // e.g. South, South-West
+  tiltAngle     Float?       // degrees
+  cableDistance Float?       // metres
+  notes         String?
+  reviewNote    String?      // reason when approved or rejected
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([leadId])
+  @@index([status])
+}
+
+// ---------- Product ----------
+// Why: every single part the company buys and sells (panel, inverter, wire...).
+// requiresSerial = true means each unit must be scanned at dispatch (F10).
+// warrantyMonths is used to start the warranty on delivery (F11):
+// 24 for inverter/battery/controller, 240 for panels.
+// stockQty is the current stock level (F18).
+
+model Product {
+  id             Int             @id @default(autoincrement())
+  name           String
+  sku            String          @unique
+  category       ProductCategory
+  unitPrice      Decimal         @db.Decimal(12, 2) // selling price
+  costPrice      Decimal         @db.Decimal(12, 2) // buying cost, feeds profit (F14)
+  stockQty       Int             @default(0)
+  lowStockLevel  Int             @default(5)
+  requiresSerial Boolean         @default(false)
+  warrantyMonths Int             @default(0)
+  active         Boolean         @default(true)
+  quoteLines     QuoteLine[]
+  serialUnits    SerialUnit[]
+  purchases      Purchase[]
+  movements      StockMovement[]
+  createdAt      DateTime        @default(now())
+
+  templateItems  TemplateItem[]
+}
+
+// ---------- PackageTemplate ----------
+// Why: ready-made systems (1-5 kW On-Grid / Off-Grid, Panel Set, Installation).
+// The public packages page (F19) reads from this table.
+
+model PackageTemplate {
+  id          Int            @id @default(autoincrement())
+  name        String
+  type        PackageType
+  capacityKw  Float?         // null for the Installation service
+  price       Decimal        @db.Decimal(12, 2)
+  description String?
+  active      Boolean        @default(true)
+  quotes      Quote[]
+  createdAt   DateTime       @default(now())
+
+  items       TemplateItem[]
+
+  @@index([type])
+}
+
+// ---------- TemplateItem ----------
+// Why: one row = "this package contains N of this product".
+// Quote generation copies these rows into the parts list automatically (F6).
+
+model TemplateItem {
+  id         Int             @id @default(autoincrement())
+  templateId Int
+  template   PackageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product         @relation(fields: [productId], references: [id])
+  quantity   Int
+
+  @@unique([templateId, productId])
+}
+
+// ---------- Quote ----------
+// Why: the price offer sent to a customer. It is created from a package
+// template, and the API refuses to create it unless the lead's survey
+// is APPROVED (F5).
+
+model Quote {
+  id          Int             @id @default(autoincrement())
+  leadId      Int
+  lead        Lead            @relation(fields: [leadId], references: [id])
+  templateId  Int?
+  template    PackageTemplate? @relation(fields: [templateId], references: [id])
+  createdById Int
+  createdBy   User            @relation(fields: [createdById], references: [id])
+
+  status      QuoteStatus     @default(DRAFT)
+  totalAmount Decimal         @default(0) @db.Decimal(12, 2)
+  notes       String?
+  order       Order?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  lines       QuoteLine[]
+
+  @@index([leadId])
+}
+
+// ---------- QuoteLine ----------
+// Why: one row = one part in the quote's parts list. It is filled
+// automatically from the package template, and the price can be edited.
+
+model QuoteLine {
+  id          Int      @id @default(autoincrement())
+  quoteId     Int
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  description String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  lineTotal   Decimal  @db.Decimal(12, 2)
+}
+
+// ---------- Order ----------
+// Why: a confirmed quote. Confirming it triggers the warehouse pick list
+// and the crew job (F9). The status moves from CONFIRMED to INSTALLED.
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  quoteId     Int         @unique
+  quote       Quote       @relation(fields: [quoteId], references: [id])
+  leadId      Int
+  lead        Lead        @relation(fields: [leadId], references: [id])
+
+  status      OrderStatus @default(CONFIRMED)
+  totalAmount Decimal     @db.Decimal(12, 2)
+  confirmedAt DateTime    @default(now())
+  deliveredAt DateTime?   // set on delivery; the warranty clock starts from this (F11)
+  serials     SerialUnit[]
+  installJob  InstallJob?
+  invoices    Invoice[]
+  subsidy     Subsidy?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  payments    Payment[]
+
+  @@index([status])
+}
+
+// ---------- Payment ----------
+// Why: every rupee received for an order (advance, balance or full payment).
+// Balance due = order total minus the sum of its payments.
+
+model Payment {
+  id      Int         @id @default(autoincrement())
+  orderId Int
+  order   Order       @relation(fields: [orderId], references: [id])
+  amount  Decimal     @db.Decimal(12, 2)
+  type    PaymentType
+  method  String?     // cash, UPI, bank transfer
+  note    String?
+  paidAt  DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+// ---------- SerialUnit ----------
+// Why: one row per scanned unit. Links each serial number to the order and
+// customer it was dispatched to. warrantyStart and warrantyEnd are filled
+// in automatically when the order is marked delivered (F11).
+
+model SerialUnit {
+  id            Int       @id @default(autoincrement())
+  serial        String    @unique
+  productId     Int
+  product       Product   @relation(fields: [productId], references: [id])
+  orderId       Int
+  order         Order     @relation(fields: [orderId], references: [id])
+
+  dispatchedAt  DateTime  @default(now())
+  warrantyStart DateTime?
+  warrantyEnd   DateTime?
+  tickets       Ticket[]
+  @@index([orderId])
+}
+
+// ---------- InstallJob ----------
+// Why: the crew's work on the roof. Created automatically when an order is
+// confirmed (F9). The technician fills in times, size, photos and the
+// customer's signature (F12). hoursWorked feeds technician pay (F17)
+// and profit per job (F14).
+
+model InstallJob {
+  id            Int       @id @default(autoincrement())
+  orderId       Int       @unique
+  order         Order     @relation(fields: [orderId], references: [id])
+  technicianId  Int?
+  technician    User?     @relation(fields: [technicianId], references: [id])
+
+  status        JobStatus @default(SCHEDULED)
+  scheduledDate DateTime?
+  startTime     DateTime?
+  endTime       DateTime?
+  hoursWorked   Float?
+  systemSizeKw  Float?
+  photoUrls     String[]
+  signatureUrl  String?
+  notes         String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+}
+
+// ---------- Ticket ----------
+// Why: a customer complaint, tracked until the customer confirms the fix (F13).
+// Support finds the customer by serial number or phone. underWarranty is
+// worked out by comparing today with the serial's warrantyEnd.
+// The ticket can only be CLOSED after customerConfirmed is true.
+
+model Ticket {
+  id                Int          @id @default(autoincrement())
+  leadId            Int
+  lead              Lead         @relation(fields: [leadId], references: [id])
+  serialUnitId      Int?
+  serialUnit        SerialUnit?  @relation(fields: [serialUnitId], references: [id])
+
+  description       String
+  faultCode         String?
+  status            TicketStatus @default(OPEN)
+  underWarranty     Boolean      @default(false)
+  customerConfirmed Boolean      @default(false)
+  resolution        String?
+  closedAt          DateTime?
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  invoices          Invoice[]
+
+  @@index([status])
+}
+
+// ---------- Invoice ----------
+// Why: a bill. Type ORDER is the sale invoice (F7). Type SERVICE is created
+// automatically for parts and labour when a repair is out of warranty (F13).
+
+model Invoice {
+  id            Int         @id @default(autoincrement())
+  invoiceNumber String      @unique
+  type          InvoiceType
+  orderId       Int?
+  order         Order?      @relation(fields: [orderId], references: [id])
+  ticketId      Int?
+  ticket        Ticket?     @relation(fields: [ticketId], references: [id])
+
+  partsAmount   Decimal     @default(0) @db.Decimal(12, 2)
+  labourAmount  Decimal     @default(0) @db.Decimal(12, 2)
+  totalAmount   Decimal     @db.Decimal(12, 2)
+  paid          Boolean     @default(false)
+  issuedAt      DateTime    @default(now())
+
+  @@index([orderId])
+  @@index([ticketId])
+}
+
+// ---------- Subsidy ----------
+// Why: tracks the government subsidy paperwork for an order (F16).
+// Stages: Applied, Documents submitted, Approved, Received.
+// documentLinks holds links to the uploaded papers.
+
+model Subsidy {
+  id            Int          @id @default(autoincrement())
+  orderId       Int          @unique
+  order         Order        @relation(fields: [orderId], references: [id])
+
+  stage         SubsidyStage @default(APPLIED)
+  amount        Decimal      @default(0) @db.Decimal(12, 2)
+  documentLinks String[]
+  notes         String?
+
+  appliedAt     DateTime     @default(now())
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  receivedAt    DateTime?
+  updatedAt     DateTime     @updatedAt
+
+  @@index([stage])
+}
+
+// ---------- TechnicianPay ----------
+// Why: monthly pay per technician (F17). amount = hours x rate.
+// One row per technician per month (month looks like "2026-11").
+
+model TechnicianPay {
+  id           Int       @id @default(autoincrement())
+  technicianId Int
+  technician   User      @relation(fields: [technicianId], references: [id])
+
+  month        String
+  hours        Float
+  rate         Decimal   @db.Decimal(10, 2)
+  amount       Decimal   @db.Decimal(12, 2)
+  paid         Boolean   @default(false)
+  paidAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([technicianId, month])
+}
+
+// ---------- Supplier ----------
+// Why: who the company buys stock from (F18).
+
+model Supplier {
+  id        Int        @id @default(autoincrement())
+  name      String
+  phone     String?
+  city      String?
+  createdAt DateTime   @default(now())
+
+  purchases Purchase[]
+}
+
+// ---------- Purchase ----------
+// Why: a stock purchase entry (supplier, product, quantity, cost) (F18).
+// Saving one raises the product's stock and feeds profit per job (F14).
+
+model Purchase {
+  id          Int      @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+
+  quantity    Int
+  unitCost    Decimal  @db.Decimal(12, 2)
+  totalCost   Decimal  @db.Decimal(12, 2)
+  purchasedAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+// ---------- StockMovement ----------
+// Why: the history of every stock change (F18). Quantity is positive when
+// stock comes in (purchase) and negative when it goes out (dispatch).
+// orderId is filled for dispatch rows so we know which order used the stock.
+
+model StockMovement {
+  id        Int          @id @default(autoincrement())
+  productId Int
+  product   Product      @relation(fields: [productId], references: [id])
+
+  type      MovementType
+  quantity  Int
+  orderId   Int?
+  note      String?
+  createdAt DateTime     @default(now())
+
+  @@index([productId])
+}
