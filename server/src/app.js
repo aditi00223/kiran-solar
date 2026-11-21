@@ -14,6 +14,10 @@ const orderRoutes = require("./routes/orders");
 const dispatchRoutes = require("./routes/dispatch");
 const installJobRoutes = require("./routes/installJobs");
 const supportRoutes = require("./routes/support");
+const stockRoutes = require("./routes/stock");
+const subsidyRoutes = require("./routes/subsidies");
+const payrollRoutes = require("./routes/payroll");
+const dashboardRoutes = require("./routes/dashboard");
 
 const app = express();
 
@@ -36,6 +40,10 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/install-jobs", installJobRoutes);
 app.use("/api", dispatchRoutes);
 app.use("/api", supportRoutes);
+app.use("/api/subsidies", subsidyRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api", stockRoutes);
+app.use("/api", payrollRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
