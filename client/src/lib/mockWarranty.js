@@ -4,6 +4,11 @@ import { todayISO } from '@/lib/mockJobs'
 
 // Sample serials per order. warrantyYears values are samples; confirm Kiran's real policy.
 export const UNITS = {
+  1: [
+    { serial: 'SP550-0001', product: 'Solar Panel 550W', warrantyYears: 25 },
+    { serial: 'SP550-0002', product: 'Solar Panel 550W', warrantyYears: 25 },
+    { serial: 'INV3K-0001', product: 'On-Grid Inverter 3 kW', warrantyYears: 5 },
+  ],
   2: [
     { serial: 'SP550-0003', product: 'Solar Panel 550W', warrantyYears: 25 },
     { serial: 'SP550-0004', product: 'Solar Panel 550W', warrantyYears: 25 },
