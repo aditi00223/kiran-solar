@@ -8,6 +8,9 @@ const authRoutes = require("./routes/auth");
 const leadRoutes = require("./routes/leads");
 const surveyRoutes = require("./routes/surveys");
 const userRoutes = require("./routes/users");
+const packageRoutes = require("./routes/packages");
+const quoteRoutes = require("./routes/quotes");
+const orderRoutes = require("./routes/orders");
 
 const app = express();
 
@@ -24,6 +27,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/surveys", surveyRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/packages", packageRoutes);
+app.use("/api/quotes", quoteRoutes);
+app.use("/api/orders", orderRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
