@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { mockOrders } from '@/lib/mockOrders'
 import { mockLeads } from '@/lib/mockLeads'
 import { deliveries, deliver } from '@/lib/mockWarranty'
+import { dispatches } from '@/lib/mockDispatch'
 
 export default function Delivery() {
   const [, setTick] = useState(0)
   const [openId, setOpenId] = useState(null)
 
-  const packed = mockOrders.filter((o) => o.warehouseStatus === 'PACKED')
+  // Only orders that Dispatch has confirmed
+  const packed = mockOrders.filter((o) => dispatches[o.id])
   const customerOf = (o) => mockLeads.find((l) => l.id === o.leadId)?.name ?? 'Unknown'
 
   function markDelivered(order) {
@@ -35,7 +37,7 @@ export default function Delivery() {
           </thead>
           <tbody>
             {packed.length === 0 && (
-              <tr><td className="p-3 text-muted-foreground" colSpan={4}>No packed orders yet.</td></tr>
+              <tr><td className="p-3 text-muted-foreground" colSpan={4}>No dispatched orders yet.</td></tr>
             )}
             {packed.map((o) => {
               const done = deliveries[o.id]
