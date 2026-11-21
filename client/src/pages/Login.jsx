@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Sun } from 'lucide-react'
+import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,7 +27,6 @@ export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState('SALES')
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
 
@@ -46,14 +46,19 @@ export default function Login() {
 
     setLoading(true)
     try {
-      // DEMO LOGIN: replace with api.post('/auth/login', ...) once API.md is ready
-      const user = { name: email.split('@')[0], email, role }
-      localStorage.setItem('token', 'demo-token')
+      const res = await api.post('/auth/login', { email: email.trim(), password })
+      const { token, user } = res.data.data
+      localStorage.setItem('token', token)
       localStorage.setItem('user', JSON.stringify(user))
       toast.success(`Welcome, ${user.name}`)
-      navigate(ROLE_HOME[role])
-    } catch {
-      toast.error('Login failed. Check your email and password.')
+      navigate(ROLE_HOME[user.role] ?? '/')
+    } catch (err) {
+      const message =
+        err.response?.data?.error ||
+        (err.request
+          ? 'Cannot reach the server. It may be waking up, please try again in a minute.'
+          : 'Login failed. Please try again.')
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -76,13 +81,11 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
-                placeholder="you@kiransolar.in"
+                placeholder="you@kiran.in"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email}</p>
-              )}
+              {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
             </div>
 
             <div className="space-y-2">
@@ -93,25 +96,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Demo role (temporary)</Label>
-              <select
-                id="role"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="SALES">Sales</option>
-                <option value="TECHNICIAN">Technician</option>
-                <option value="WAREHOUSE">Warehouse</option>
-                <option value="SUPPORT">Support</option>
-                <option value="DIRECTOR">Director</option>
-              </select>
+              {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
