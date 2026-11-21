@@ -13,6 +13,8 @@ import OrderDetail from '@/pages/OrderDetail'
 import Warehouse from '@/pages/Warehouse'
 import Schedule from '@/pages/Schedule'
 import Dashboard from '@/pages/Dashboard'
+import Subsidy from '@/pages/Subsidy'
+import SubsidyDetail from '@/pages/SubsidyDetail'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -44,6 +46,8 @@ function App() {
           <Route path="/warehouse" element={<Warehouse />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/subsidy" element={<Subsidy />} />
+          <Route path="/subsidy/:id" element={<SubsidyDetail />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
