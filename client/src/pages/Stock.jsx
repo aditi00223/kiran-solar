@@ -55,6 +55,23 @@ export default function Stock() {
     setForm({ ...form, supplier: '', quantity: '', cost: '' })
   }
 
+  function exportCsv() {
+    const rows = [
+      ['Date', 'Product', 'Supplier', 'Qty added', 'Cost (Rs)'],
+      ...history.map((h) => [h.date, h.product, h.supplier, h.quantity, h.cost]),
+    ]
+    const csv = rows
+      .map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'stock-purchases.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Stock and Purchases</h1>
@@ -139,7 +156,17 @@ export default function Stock() {
       </form>
 
       <div className="rounded-lg border bg-white overflow-x-auto">
-        <h2 className="p-3 text-lg font-semibold">Stock movement history</h2>
+        <div className="flex items-center justify-between p-3">
+          <h2 className="text-lg font-semibold">Stock movement history</h2>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={history.length === 0}
+            className="rounded border px-3 py-1 text-sm font-medium disabled:opacity-50"
+          >
+            Download CSV
+          </button>
+        </div>
         <table className="w-full text-left">
           <thead>
             <tr className="border-b">
