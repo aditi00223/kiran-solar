@@ -14,6 +14,7 @@ import {
   Package,
   LogOut,
   Sun,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -54,6 +55,11 @@ export default function AppLayout() {
   const items = MENU.filter((item) => item.roles.includes(user.role))
   const current = MENU.find((item) => pathname.startsWith(item.to.split('/:')[0]))
 
+  // Route guard: which menu rule covers this page, and is this role allowed?
+  const segment = pathname.split('/')[1]
+  const rule = MENU.find((item) => item.to.split('/')[1] === segment)
+  const allowed = !rule || rule.roles.includes(user.role)
+
   function logout() {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
@@ -93,8 +99,12 @@ export default function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b bg-card px-6 py-3">
           <div>
-            <p className="text-xs text-muted-foreground">Kiran / {current?.label ?? 'Page'}</p>
-            <h1 className="text-lg font-semibold">{current?.label ?? 'Page'}</h1>
+            <p className="text-xs text-muted-foreground">
+              Kiran / {allowed ? (current?.label ?? 'Page') : 'No access'}
+            </p>
+            <h1 className="text-lg font-semibold">
+              {allowed ? (current?.label ?? 'Page') : 'No access'}
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -110,7 +120,22 @@ export default function AppLayout() {
           </div>
         </header>
         <main className="flex-1 p-6">
-          <Outlet />
+          {allowed ? (
+            <Outlet />
+          ) : (
+            <div className="mx-auto max-w-md space-y-4 py-16 text-center">
+              <ShieldAlert className="mx-auto h-12 w-12 text-amber-600" />
+              <h2 className="text-xl font-semibold">You don't have access</h2>
+              <p className="text-sm text-muted-foreground">
+                Your role ({user.role.toLowerCase()}) cannot open this page.
+              </p>
+              {items[0] && (
+                <Button onClick={() => navigate(items[0].to)}>
+                  Go to {items[0].label}
+                </Button>
+              )}
+            </div>
+          )}
         </main>
       </div>
     </div>
