@@ -101,6 +101,7 @@ export default function Schedule() {
   }, [version, role, navigate])
 
   const today = todayISO()
+  const thisWeek = mondayOf(today)
   const canAssign = role === 'SALES'
   const unscheduled = jobs.filter((j) => j.status === 'SCHEDULED' && (!j.technician || !j.scheduledAt))
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -212,13 +213,16 @@ export default function Schedule() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">
+            {weekStart === thisWeek && <span className="mr-2 text-primary">This week:</span>}
             {shortDate(days[0])} to {shortDate(days[6])} {fromISO(days[6]).getFullYear()}
           </h2>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setWeekStart(mondayOf(today))}>This week</Button>
+            <Button variant="outline" size="sm" disabled={weekStart === thisWeek} onClick={() => setWeekStart(thisWeek)}>
+              This week
+            </Button>
             <Button variant="outline" size="icon" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
