@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Sun, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import FormField from '@/components/FormField'
+import { addLead } from '@/lib/mockLeads'
 
 const EMPTY = { name: '', phone: '', address: '', systemSize: '3', message: '' }
 
@@ -38,6 +40,7 @@ export default function Enquiry() {
     try {
       // TEMPORARY: replace with api.post('/leads', { ...form, source: 'WEB' })
       await new Promise((r) => setTimeout(r, 600))
+      addLead(form)
       setDone(true)
       toast.success('Enquiry sent. Our team will call you soon.')
     } catch {
@@ -112,6 +115,12 @@ export default function Enquiry() {
               </Button>
             </form>
           )}
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Kiran staff?{' '}
+            <Link to="/login" className="font-medium text-primary underline">
+              Sign in
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>

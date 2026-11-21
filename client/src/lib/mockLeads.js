@@ -10,3 +10,20 @@ export const mockLeads = [
   { id: 8, name: 'Amandeep Brar', phone: '98550 14367', city: 'Bathinda', address: '19 Ajit Road, Bathinda', systemSize: 4, source: 'CALL', status: 'DISPATCHED', createdAt: '2026-11-03', callCheck: { shadowFreeArea: 50, monthlyBill: 5100, gridSuitable: true } },
   { id: 9, name: 'Kuldeep Singh Bedi', phone: '99888 70541', city: 'Moga', address: '56 Ghalib Kalan Road, Moga', systemSize: 3, source: 'WEB', status: 'INSTALLED', createdAt: '2026-10-25', callCheck: { shadowFreeArea: 38, monthlyBill: 3900, gridSuitable: true } },
 ]
+export function addLead({ name, phone, address, systemSize, message }) {
+  const lead = {
+    id: mockLeads.length + 1,
+    name: name.trim(),
+    phone: phone.trim(),
+    city: address.split(',').pop().trim() || 'Punjab',
+    address: address.trim(),
+    systemSize: Number(systemSize),
+    source: 'WEB',
+    status: 'NEW',
+    createdAt: new Date().toISOString().slice(0, 10),
+    callCheck: null,
+    message: message?.trim() ?? '',
+  }
+  mockLeads.unshift(lead)
+  return lead
+}

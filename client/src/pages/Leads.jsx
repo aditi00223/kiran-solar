@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search } from 'lucide-react'
+import { BellRing, Search } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import DataTable from '@/components/DataTable'
 import StatusBadge from '@/components/StatusBadge'
@@ -28,7 +29,7 @@ export default function Leads() {
   useEffect(() => {
     // TEMPORARY: simulates a server call. Replace with api.get('/leads')
     const timer = setTimeout(() => {
-      setLeads(mockLeads)
+      setLeads([...mockLeads])
       setLoading(false)
     }, 600)
     return () => clearTimeout(timer)
@@ -44,6 +45,8 @@ export default function Leads() {
     )
   }, [leads, search, status, source])
 
+  const newCount = leads.filter((l) => l.status === 'NEW').length
+
   const columns = [
     { key: 'name', header: 'Name', render: (l) => <span className="font-medium">{l.name}</span> },
     { key: 'phone', header: 'Phone' },
@@ -56,6 +59,22 @@ export default function Leads() {
 
   return (
     <div className="space-y-4">
+      {!loading && newCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-3 text-sm text-amber-900">
+            <BellRing className="h-5 w-5" />
+            <p>
+              <span className="font-semibold">{newCount}</span> new lead{newCount > 1 ? 's' : ''} waiting to be contacted
+            </p>
+          </div>
+          {status === 'NEW' ? (
+            <Button size="sm" variant="outline" onClick={() => setStatus('')}>Show all leads</Button>
+          ) : (
+            <Button size="sm" onClick={() => setStatus('NEW')}>Show new leads</Button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
