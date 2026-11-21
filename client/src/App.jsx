@@ -10,6 +10,8 @@ import QuoteNew from '@/pages/QuoteNew'
 import QuoteView from '@/pages/QuoteView'
 import Orders from '@/pages/Orders'
 import OrderDetail from '@/pages/OrderDetail'
+import Warehouse from '@/pages/Warehouse'
+import Schedule from '@/pages/Schedule'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -38,6 +40,8 @@ function App() {
           <Route path="/quotes/:id" element={<QuoteView />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/warehouse" element={<Warehouse />} />
+          <Route path="/schedule" element={<Schedule />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
