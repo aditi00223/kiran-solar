@@ -15,6 +15,9 @@ export default function Stock() {
   const [form, setForm] = useState({ productId: '1', supplier: '', quantity: '', cost: '' })
   const [error, setError] = useState('')
 
+  const lowCount = products.filter((p) => p.quantity < p.minimum).length
+  const totalSpend = history.reduce((sum, h) => sum + h.cost, 0)
+
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
@@ -48,6 +51,21 @@ export default function Stock() {
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Stock and Purchases</h1>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border bg-white p-4">
+          <p className="text-sm text-muted-foreground">Total products</p>
+          <p className="text-2xl font-semibold">{products.length}</p>
+        </div>
+        <div className="rounded-lg border bg-white p-4">
+          <p className="text-sm text-muted-foreground">Low stock items</p>
+          <p className={'text-2xl font-semibold ' + (lowCount > 0 ? 'text-red-600' : 'text-green-600')}>{lowCount}</p>
+        </div>
+        <div className="rounded-lg border bg-white p-4">
+          <p className="text-sm text-muted-foreground">Total purchase spend</p>
+          <p className="text-2xl font-semibold">Rs {totalSpend.toLocaleString('en-IN')}</p>
+        </div>
+      </div>
 
       <div className="rounded-lg border bg-white overflow-x-auto">
         <table className="w-full text-left">
