@@ -8,6 +8,8 @@ import Surveys from '@/pages/Surveys'
 import SurveyDetail from '@/pages/SurveyDetail'
 import QuoteNew from '@/pages/QuoteNew'
 import QuoteView from '@/pages/QuoteView'
+import Orders from '@/pages/Orders'
+import OrderDetail from '@/pages/OrderDetail'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -34,6 +36,8 @@ function App() {
           <Route path="/surveys/:id" element={<SurveyDetail />} />
           <Route path="/quotes/new" element={<QuoteNew />} />
           <Route path="/quotes/:id" element={<QuoteView />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
