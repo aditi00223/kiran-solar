@@ -7,13 +7,15 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import FormField from '@/components/FormField'
 
-const EMPTY = { name: '', phone: '', address: '', systemSize: '3', message: '' }
+const EMPTY = { name: '', phone: '', address: '', systemSize: '', message: '' }
+const MAX_KW = 100
 
 export default function Enquiry() {
   const [form, setForm] = useState(EMPTY)
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
+  const [sentSize, setSentSize] = useState(null)
 
   function set(field) {
     return (e) => setForm({ ...form, [field]: e.target.value })
@@ -26,6 +28,15 @@ export default function Enquiry() {
     if (!digits) next.phone = 'Enter your phone number'
     else if (digits.length !== 10) next.phone = 'Phone number must be 10 digits'
     if (!form.address.trim()) next.address = 'Enter your address'
+
+    // System size is optional, but if it is typed it must make sense
+    const size = form.systemSize.trim()
+    if (size) {
+      const kw = Number(size)
+      if (Number.isNaN(kw)) next.systemSize = 'Enter a number, for example 3 or 2.5'
+      else if (kw <= 0) next.systemSize = 'System size must be more than 0 kW'
+      else if (kw > MAX_KW) next.systemSize = `System size cannot be more than ${MAX_KW} kW`
+    }
     return next
   }
 
@@ -35,15 +46,17 @@ export default function Enquiry() {
     setErrors(found)
     if (Object.keys(found).length > 0) return
 
+    const size = form.systemSize.trim()
     setLoading(true)
     try {
       await api.post('/leads', {
         name: form.name.trim(),
         phone: form.phone.replace(/\D/g, ''),
         address: form.address.trim(),
-        systemSizeKw: Number(form.systemSize),
+        systemSizeKw: size ? Number(size) : undefined,
         message: form.message.trim() || undefined,
       })
+      setSentSize(size ? Number(size) : null)
       setDone(true)
       toast.success('Enquiry sent. Our team will call you soon.')
     } catch (err) {
@@ -72,12 +85,15 @@ export default function Enquiry() {
               <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
               <p className="text-lg font-semibold">Thank you, {form.name}!</p>
               <p className="text-sm text-muted-foreground">
-                We received your enquiry for a {form.systemSize} kW system and will call you soon.
+                {sentSize
+                  ? `We received your enquiry for a ${sentSize} kW system and will call you soon.`
+                  : 'We received your enquiry and will call you soon to help you choose the right size.'}
               </p>
               <Button
                 variant="outline"
                 onClick={() => {
                   setForm(EMPTY)
+                  setSentSize(null)
                   setDone(false)
                 }}
               >
@@ -89,20 +105,15 @@ export default function Enquiry() {
               <FormField label="Full name" name="name" value={form.name} onChange={set('name')} error={errors.name} placeholder="Gurpreet Singh" />
               <FormField label="Phone number" name="phone" type="tel" value={form.phone} onChange={set('phone')} error={errors.phone} placeholder="98765 43210" />
               <FormField label="Address" name="address" value={form.address} onChange={set('address')} error={errors.address} placeholder="House no, street, city" />
-
-              <div className="space-y-2">
-                <Label htmlFor="systemSize">System size</Label>
-                <select
-                  id="systemSize"
-                  value={form.systemSize}
-                  onChange={set('systemSize')}
-                  className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-                >
-                  {[1, 2, 3, 4, 5].map((kw) => (
-                    <option key={kw} value={kw}>{kw} kW</option>
-                  ))}
-                </select>
-              </div>
+              <FormField
+                label="System size you want, in kW (optional)"
+                name="systemSize"
+                type="number"
+                value={form.systemSize}
+                onChange={set('systemSize')}
+                error={errors.systemSize}
+                placeholder="For example 3. Leave empty if you are not sure"
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="message">Message (optional)</Label>
