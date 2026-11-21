@@ -6,6 +6,8 @@ import Leads from '@/pages/Leads'
 import LeadDetail from '@/pages/LeadDetail'
 import Surveys from '@/pages/Surveys'
 import SurveyDetail from '@/pages/SurveyDetail'
+import QuoteNew from '@/pages/QuoteNew'
+import QuoteView from '@/pages/QuoteView'
 import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
@@ -30,6 +32,8 @@ function App() {
           <Route path="/leads/:id" element={<LeadDetail />} />
           <Route path="/surveys" element={<Surveys />} />
           <Route path="/surveys/:id" element={<SurveyDetail />} />
+          <Route path="/quotes/new" element={<QuoteNew />} />
+          <Route path="/quotes/:id" element={<QuoteView />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
