@@ -1,34 +1,32 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react'
+import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { SubsidyBadge } from '@/pages/Subsidy'
-import { mockLeads } from '@/lib/mockLeads'
-import { mockOrders } from '@/lib/mockOrders'
-import { rupees } from '@/lib/mockPackages'
-import { todayISO } from '@/lib/mockJobs'
-import {
-  STAGES,
-  addDocument,
-  advanceSubsidy,
-  getSubsidy,
-  nextStage,
-  removeDocument,
-  setAmount,
-} from '@/lib/mockSubsidy'
+import { STAGES, SubsidyBadge, stageLabel } from '@/pages/Subsidy'
+
+const rupees = (n) => 'Rs ' + Number(n || 0).toLocaleString('en-IN')
 
 function Detail({ label, children }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{children}</p>
+      <p className="text-sm font-medium">{children || '-'}</p>
     </div>
   )
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
 }
 
 export default function SubsidyDetail() {
@@ -36,43 +34,68 @@ export default function SubsidyDetail() {
   const navigate = useNavigate()
   const [subsidy, setSubsidy] = useState(null)
   const [lead, setLead] = useState(null)
-  const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [, setVersion] = useState(0)
+  const [loadError, setLoadError] = useState(null)
 
   const [amountInput, setAmountInput] = useState('')
-  const [docName, setDocName] = useState('')
   const [docUrl, setDocUrl] = useState('')
-  const [receivedOn, setReceivedOn] = useState(todayISO())
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    // TEMPORARY: replace with api.get(`/subsidies/${id}`)
-    const timer = setTimeout(() => {
-      const found = getSubsidy(id)
-      setSubsidy(found)
-      setLead(found ? mockLeads.find((l) => l.id === found.leadId) ?? null : null)
-      setOrder(found ? mockOrders.find((o) => o.id === found.orderId) ?? null : null)
-      if (found && found.amount > 0) setAmountInput(String(found.amount))
-      setLoading(false)
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [id])
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const res = await api.get('/subsidies', { params: { limit: 50 } })
+        if (cancelled) return
+        const found = res.data.data.find((s) => String(s.id) === id)
+        if (!found) {
+          setLoadError('We could not find this subsidy record.')
+          return
+        }
+        setSubsidy(found)
+        if (Number(found.amount) > 0) setAmountInput(String(found.amount))
+        const leadId = found.order?.lead?.id
+        if (leadId) {
+          try {
+            const l = await api.get(`/leads/${leadId}`)
+            if (!cancelled) setLead(l.data.data)
+          } catch {
+            if (!cancelled) setLead(found.order.lead)
+          }
+        }
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setLoadError(err.response?.data?.error || 'Could not load this record. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [id, navigate])
 
-  // Runs one action with a short fake delay, then shows the result or the error
-  async function run(action, successMessage) {
+  async function update(body, successMessage) {
     setError('')
     setBusy(true)
     try {
-      // TEMPORARY: replace with an api call
-      await new Promise((r) => setTimeout(r, 400))
-      action()
+      const res = await api.patch(`/subsidies/${id}`, body)
+      setSubsidy((prev) => ({ ...prev, ...res.data.data, order: res.data.data.order ?? prev.order }))
       if (successMessage) toast.success(successMessage)
-      setVersion((v) => v + 1)
       return true
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.')
+      const message = err.response?.data?.error || 'Something went wrong. Please try again.'
+      setError(message)
+      toast.error(message)
       return false
     } finally {
       setBusy(false)
@@ -81,25 +104,30 @@ export default function SubsidyDetail() {
 
   async function handleSaveAmount(e) {
     e.preventDefault()
-    await run(() => setAmount(subsidy.id, amountInput), 'Subsidy amount saved')
+    const value = Number(amountInput)
+    if (!value || value <= 0) {
+      setError('Enter the subsidy amount')
+      return
+    }
+    await update({ amount: value }, 'Subsidy amount saved')
   }
 
   async function handleAddDocument(e) {
     e.preventDefault()
-    const ok = await run(() => addDocument(subsidy.id, { name: docName, url: docUrl }), 'Document link added')
-    if (ok) {
-      setDocName('')
-      setDocUrl('')
+    const url = docUrl.trim()
+    if (!/^https?:\/\//i.test(url)) {
+      setError('The link must start with http:// or https://')
+      return
     }
-  }
-
-  async function handleRemove(docId) {
-    await run(() => removeDocument(subsidy.id, docId), 'Document link removed')
+    const ok = await update({ documentLinks: [url] }, 'Document link added')
+    if (ok) setDocUrl('')
   }
 
   async function handleAdvance() {
-    const next = nextStage(subsidy.status)
-    await run(() => advanceSubsidy(subsidy.id, { receivedOn }), `Subsidy marked as ${next.label.toLowerCase()}`)
+    const index = STAGES.findIndex((s) => s.value === subsidy.stage)
+    const next = STAGES[index + 1]
+    if (!next) return
+    await update({ stage: next.value }, `Subsidy marked as ${next.label.toLowerCase()}`)
   }
 
   if (loading) {
@@ -112,18 +140,26 @@ export default function SubsidyDetail() {
     )
   }
 
-  if (!subsidy || !lead) {
+  if (loadError || !subsidy) {
     return (
       <div className="space-y-4">
-        <p className="text-muted-foreground">We could not find this subsidy record.</p>
+        <p className="text-destructive">{loadError || 'We could not find this subsidy record.'}</p>
         <Button variant="outline" onClick={() => navigate('/subsidy')}>Back to subsidy list</Button>
       </div>
     )
   }
 
-  const next = nextStage(subsidy.status)
-  const currentIndex = STAGES.findIndex((s) => s.value === subsidy.status)
-  const received = subsidy.status === 'RECEIVED'
+  const currentIndex = STAGES.findIndex((s) => s.value === subsidy.stage)
+  const next = STAGES[currentIndex + 1]
+  const received = subsidy.stage === 'RECEIVED'
+  const links = subsidy.documentLinks ?? []
+  const canEdit = localStorage.getItem('user') && JSON.parse(localStorage.getItem('user')).role === 'SALES'
+  const dates = {
+    APPLIED: subsidy.appliedOn,
+    DOCUMENTS_SUBMITTED: subsidy.submittedOn,
+    APPROVED: subsidy.approvedOn,
+    RECEIVED: subsidy.receivedOn,
+  }
 
   return (
     <div className="space-y-6">
@@ -133,23 +169,21 @@ export default function SubsidyDetail() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-xl">{lead.name}</CardTitle>
-          <SubsidyBadge status={subsidy.status} />
+          <CardTitle className="text-xl">{lead?.name ?? subsidy.order?.lead?.name}</CardTitle>
+          <SubsidyBadge status={subsidy.stage} />
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Detail label="Phone">{lead.phone}</Detail>
-            <Detail label="Address">{lead.address}</Detail>
-            {order && (
-              <div>
-                <p className="text-xs text-muted-foreground">Order</p>
-                <Link to={`/orders/${order.id}`} className="text-sm font-medium text-primary hover:underline">
-                  {order.number}
-                </Link>
-              </div>
-            )}
-            <Detail label="Applied on">{subsidy.appliedOn}</Detail>
-            <Detail label="Subsidy amount">{subsidy.amount > 0 ? rupees(subsidy.amount) : 'Not set'}</Detail>
+            <Detail label="Phone">{lead?.phone}</Detail>
+            <Detail label="Address">{lead?.address}</Detail>
+            <Detail label="City">{lead?.city ?? subsidy.order?.lead?.city}</Detail>
+            <div>
+              <p className="text-xs text-muted-foreground">Order</p>
+              <Link to={`/orders/${subsidy.order?.id}`} className="text-sm font-medium text-primary hover:underline">
+                O-{subsidy.order?.id}
+              </Link>
+            </div>
+            <Detail label="Subsidy amount">{Number(subsidy.amount) > 0 ? rupees(subsidy.amount) : 'Not set'}</Detail>
             {received && <Detail label="Received on">{subsidy.receivedOn}</Detail>}
           </div>
 
@@ -165,76 +199,67 @@ export default function SubsidyDetail() {
                       : 'text-muted-foreground'
                 }`}
               >
-                {i + 1}. {s.label}
+                <p>{i + 1}. {s.label}</p>
+                {dates[s.value] && <p className="text-xs font-normal">{dates[s.value]}</p>}
               </li>
             ))}
           </ol>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Subsidy amount</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSaveAmount} className="flex max-w-md items-end gap-3" noValidate>
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="amount">Amount (Rs)</Label>
-              <Input
-                id="amount"
-                type="number"
-                min="0"
-                value={amountInput}
-                disabled={received}
-                onChange={(e) => setAmountInput(e.target.value)}
-              />
-            </div>
-            <Button type="submit" disabled={busy || received}>Save amount</Button>
-          </form>
-        </CardContent>
-      </Card>
+      {canEdit && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Subsidy amount</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveAmount} className="flex max-w-md items-end gap-3" noValidate>
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="amount">Amount (Rs)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  min="0"
+                  value={amountInput}
+                  disabled={received}
+                  onChange={(e) => setAmountInput(e.target.value)}
+                />
+              </div>
+              <Button type="submit" disabled={busy || received}>Save amount</Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Documents ({subsidy.documents.length})</CardTitle>
+          <CardTitle className="text-lg">Documents ({links.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {subsidy.documents.length === 0 ? (
+          {links.length === 0 ? (
             <p className="text-sm text-muted-foreground">No document links yet. Add the customer's papers below.</p>
           ) : (
             <ul className="divide-y rounded-lg border text-sm">
-              {subsidy.documents.map((d) => (
-                <li key={d.id} className="flex items-center justify-between gap-4 px-4 py-2">
+              {links.map((url) => (
+                <li key={url} className="px-4 py-2">
                   <a
-                    href={d.url}
+                    href={url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 font-medium text-primary hover:underline"
                   >
-                    {d.name} <ExternalLink className="h-3 w-3" />
+                    {hostOf(url)} <ExternalLink className="h-3 w-3" />
                   </a>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove ${d.name}`}
-                    disabled={busy || received}
-                    onClick={() => handleRemove(d.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+                  <p className="truncate text-xs text-muted-foreground">{url}</p>
                 </li>
               ))}
             </ul>
           )}
 
-          {!received && (
-            <form onSubmit={handleAddDocument} className="grid max-w-2xl gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end" noValidate>
+          {canEdit && !received && (
+            <form onSubmit={handleAddDocument} className="grid max-w-2xl gap-3 sm:grid-cols-[1fr_auto] sm:items-end" noValidate>
               <div className="space-y-2">
-                <Label htmlFor="docName">Document name</Label>
-                <Input id="docName" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="Electricity bill" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="docUrl">Link</Label>
+                <Label htmlFor="docUrl">Document link</Label>
                 <Input id="docUrl" value={docUrl} onChange={(e) => setDocUrl(e.target.value)} placeholder="https://drive.google.com/..." />
               </div>
               <Button type="submit" variant="outline" disabled={busy}>Add link</Button>
@@ -249,30 +274,19 @@ export default function SubsidyDetail() {
         </CardHeader>
         <CardContent className="max-w-md space-y-4">
           {next ? (
-            <>
-              {next.value === 'RECEIVED' && (
-                <div className="space-y-2">
-                  <Label htmlFor="receivedOn">Date the subsidy was received</Label>
-                  <Input
-                    id="receivedOn"
-                    type="date"
-                    max={todayISO()}
-                    value={receivedOn}
-                    onChange={(e) => setReceivedOn(e.target.value)}
-                  />
-                </div>
-              )}
-              {error && <p className="text-sm text-destructive">{error}</p>}
+            canEdit ? (
               <Button disabled={busy} onClick={handleAdvance}>
                 {busy ? 'Saving...' : `Mark as ${next.label.toLowerCase()}`}
               </Button>
-            </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Next stage: {stageLabel(next.value)}. Only Sales can move it forward.</p>
+            )
           ) : (
             <p className="text-sm text-muted-foreground">
               The subsidy of {rupees(subsidy.amount)} was received on {subsidy.receivedOn}. Nothing more to do.
             </p>
           )}
-          {!next && error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
     </div>
