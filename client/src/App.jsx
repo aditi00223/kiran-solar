@@ -17,6 +17,7 @@ import Subsidy from '@/pages/Subsidy'
 import SubsidyDetail from '@/pages/SubsidyDetail'
 import Payroll from '@/pages/Payroll'
 import AppLayout from '@/layouts/AppLayout'
+import Stock from '@/pages/Stock'
 
 // Temporary page for routes we haven't built yet
 function ComingSoon() {
@@ -38,6 +39,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
+          <Route path="/stock" element={<Stock />} />
           <Route path="/surveys" element={<Surveys />} />
           <Route path="/surveys/:id" element={<SurveyDetail />} />
           <Route path="/quotes/new" element={<QuoteNew />} />
