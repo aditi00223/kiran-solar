@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const { ok } = require("./utils/response");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
+const authRoutes = require("./routes/auth");
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(morgan("dev"));
 app.get("/api/health", (req, res) => ok(res, { status: "Kiran API running" }));
 
 // Feature routes get plugged in here in later steps
+app.use("/api/auth", authRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
