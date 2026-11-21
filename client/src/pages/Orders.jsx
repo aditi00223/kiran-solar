@@ -1,43 +1,31 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import DataTable from '@/components/DataTable'
-import { mockLeads } from '@/lib/mockLeads'
-import { packageLabel, rupees } from '@/lib/mockPackages'
-import {
-  MIN_ADVANCE_PERCENT,
-  PAYMENT_METHODS,
-  confirmOrder,
-  getBalance,
-  getPaid,
-  getQuotesWithoutOrder,
-  minAdvanceFor,
-  mockOrders,
-} from '@/lib/mockOrders'
 
 const selectClass = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'
+const PAYMENT_METHODS = ['UPI', 'Cash', 'Bank transfer', 'Cheque']
+const rupees = (n) => 'Rs ' + Number(n || 0).toLocaleString('en-IN')
 
 export function PaymentBadge({ order }) {
-  const balance = getBalance(order)
-  if (balance <= 0) {
+  if (Number(order.balance) <= 0) {
     return <Badge variant="secondary" className="border-transparent bg-green-100 text-green-700">Paid in full</Badge>
   }
   return <Badge variant="secondary" className="border-transparent bg-amber-100 text-amber-800">Balance due</Badge>
 }
 
-function leadName(leadId) {
-  return mockLeads.find((l) => l.id === leadId)?.name ?? 'Unknown customer'
-}
-
 export default function Orders() {
   const navigate = useNavigate()
+  const [orders, setOrders] = useState([])
+  const [waiting, setWaiting] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error] = useState(null)
+  const [error, setError] = useState(null)
   const [version, setVersion] = useState(0)
   const [openQuoteId, setOpenQuoteId] = useState(null)
   const [amount, setAmount] = useState('')
@@ -46,56 +34,86 @@ export default function Orders() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // TEMPORARY: simulates a server call. Replace with api.get('/orders')
-    const timer = setTimeout(() => setLoading(false), 600)
-    return () => clearTimeout(timer)
-  }, [])
-
-  // version changes after every confirmation, so these lists are read fresh
-  void version
-  const waiting = getQuotesWithoutOrder()
-  const rows = [...mockOrders]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
-    .map((o) => ({
-      ...o,
-      customer: leadName(o.leadId),
-      paid: getPaid(o),
-      balance: getBalance(o),
-    }))
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [o, q] = await Promise.all([
+          api.get('/orders', { params: { limit: 50 } }),
+          api.get('/quotes', { params: { limit: 50 } }),
+        ])
+        if (cancelled) return
+        setOrders(o.data.data)
+        // The list has no orderId, so check each quote that could still be ordered
+        const candidates = q.data.data.filter((x) => x.status !== 'ACCEPTED')
+        const details = await Promise.all(
+          candidates.map((x) => api.get(`/quotes/${x.id}`).then((r) => r.data.data).catch(() => null))
+        )
+        if (cancelled) return
+        setWaiting(details.filter((d) => d && d.orderId == null))
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setError(err.response?.data?.error || 'Could not load orders. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [version, navigate])
 
   function openConfirm(quote) {
     setOpenQuoteId(quote.id)
-    setAmount(String(minAdvanceFor(quote.total)))
+    setAmount('')
     setMethod('UPI')
     setFormError('')
   }
 
   async function handleConfirm(quote) {
     setFormError('')
+    const value = Number(amount)
+    if (!value || value <= 0) {
+      setFormError('Enter the advance amount received')
+      return
+    }
     setSaving(true)
     try {
-      // TEMPORARY: replace with api.post('/orders', ...)
-      await new Promise((r) => setTimeout(r, 500))
-      const order = confirmOrder({ quoteId: quote.id, amount, method })
-      toast.success(`Order ${order.number} confirmed. The warehouse can now pack it.`)
+      const res = await api.post('/orders', {
+        quoteId: quote.id,
+        payment: {
+          amount: value,
+          type: value >= Number(quote.totalAmount) ? 'FULL' : 'ADVANCE',
+          method,
+        },
+      })
+      toast.success(`Order O-${res.data.data.id} confirmed. The warehouse can now pack it.`)
       setOpenQuoteId(null)
       setVersion((v) => v + 1)
     } catch (err) {
-      setFormError(err.message || 'Could not confirm the order. Please try again.')
-      toast.error(err.message || 'Could not confirm the order')
+      const message = err.response?.data?.error || 'Could not confirm the order. Please try again.'
+      setFormError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
 
   const columns = [
-    { key: 'number', header: 'Order', render: (o) => <span className="font-medium">{o.number}</span> },
-    { key: 'customer', header: 'Customer' },
-    { key: 'total', header: 'Total', render: (o) => rupees(o.total) },
+    { key: 'id', header: 'Order', render: (o) => <span className="font-medium">O-{o.id}</span> },
+    { key: 'customer', header: 'Customer', render: (o) => o.lead?.name },
+    { key: 'totalAmount', header: 'Total', render: (o) => rupees(o.totalAmount) },
     { key: 'paid', header: 'Paid', render: (o) => rupees(o.paid) },
     { key: 'balance', header: 'Balance', render: (o) => rupees(o.balance) },
     { key: 'status', header: 'Payment', render: (o) => <PaymentBadge order={o} /> },
-    { key: 'createdAt', header: 'Date' },
+    { key: 'confirmedAt', header: 'Date', render: (o) => String(o.confirmedAt).slice(0, 10) },
   ]
 
   return (
@@ -110,9 +128,9 @@ export default function Orders() {
               <div key={q.id} className="space-y-3 rounded-lg border p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium">{leadName(q.leadId)}</p>
+                    <p className="font-medium">{q.lead?.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {q.number}: {packageLabel(q.type, q.kw)}, total {rupees(q.total)}
+                      Q-{q.id}: {q.template?.name}, total {rupees(q.totalAmount)}
                     </p>
                   </div>
                   {openQuoteId !== q.id && (
@@ -123,7 +141,7 @@ export default function Orders() {
                 {openQuoteId === q.id && (
                   <div className="max-w-md space-y-4 border-t pt-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`advance-${q.id}`}>Advance received (Rs)</Label>
+                      <Label htmlFor={`advance-${q.id}`}>Payment received (Rs)</Label>
                       <Input
                         id={`advance-${q.id}`}
                         type="number"
@@ -131,9 +149,13 @@ export default function Orders() {
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Minimum {MIN_ADVANCE_PERCENT}% of the total: {rupees(minAdvanceFor(q.total))}. Enter the full total for a full payment.
-                      </p>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary hover:underline"
+                        onClick={() => setAmount(String(q.totalAmount))}
+                      >
+                        Fill the full total ({rupees(q.totalAmount)})
+                      </button>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`method-${q.id}`}>Payment method</Label>
@@ -160,7 +182,7 @@ export default function Orders() {
 
       <DataTable
         columns={columns}
-        data={rows}
+        data={orders}
         loading={loading}
         error={error}
         emptyMessage="No orders yet"

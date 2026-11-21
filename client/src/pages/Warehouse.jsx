@@ -1,142 +1,155 @@
 import { useEffect, useState } from 'react'
-import { PackageCheck } from 'lucide-react'
-import { toast } from 'sonner'
+import { Link, useNavigate } from 'react-router-dom'
+import { ScanLine } from 'lucide-react'
+import api from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { mockLeads } from '@/lib/mockLeads'
-import { packageLabel } from '@/lib/mockPackages'
-import { getQuote } from '@/lib/mockPackages'
-import { mockOrders } from '@/lib/mockOrders'
-import { getJobs, packOrder } from '@/lib/mockJobs'
 
 const TABS = [
-  { value: 'TO_PACK', label: 'To pack' },
-  { value: 'PACKED', label: 'Packed' },
+  { value: 'TO_DISPATCH', label: 'To dispatch', statuses: ['CONFIRMED', 'PACKED'] },
+  { value: 'DISPATCHED', label: 'Dispatched', statuses: ['DISPATCHED'] },
 ]
 
-export default function Warehouse() {
-  const [loading, setLoading] = useState(true)
-  const [error] = useState(null)
-  const [, setVersion] = useState(0)
-  const [tab, setTab] = useState('TO_PACK')
-  const [busyId, setBusyId] = useState(null)
+function PickList({ orderId }) {
+  const [items, setItems] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    // TEMPORARY: simulates a server call. Replace with api.get('/warehouse/orders')
-    const timer = setTimeout(() => setLoading(false), 600)
-    return () => clearTimeout(timer)
-  }, [])
-
-  const jobs = getJobs()
-  const toPackCount = mockOrders.filter((o) => o.warehouseStatus === 'TO_PACK').length
-  const orders = mockOrders
-    .filter((o) => o.warehouseStatus === tab)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)
-
-  async function handlePack(order) {
-    setBusyId(order.id)
-    try {
-      // TEMPORARY: replace with api.put(`/orders/${order.id}/pack`)
-      await new Promise((r) => setTimeout(r, 500))
-      packOrder(order.id)
-      toast.success(`Order ${order.number} packed and ready for dispatch`)
-      setVersion((v) => v + 1)
-    } catch (err) {
-      toast.error(err.message || 'Could not mark the order as packed')
-    } finally {
-      setBusyId(null)
+    let cancelled = false
+    api
+      .get(`/orders/${orderId}/pick-list`)
+      .then((res) => {
+        if (!cancelled) setItems(res.data.data.items)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.response?.data?.error || 'Could not load the pick list')
+      })
+    return () => {
+      cancelled = true
     }
-  }
+  }, [orderId])
+
+  if (error) return <p className="text-sm text-destructive">{error}</p>
+  if (!items) return <Skeleton className="h-20 w-full" />
+  if (items.length === 0) return <p className="text-sm text-muted-foreground">No serial-tracked items on this order.</p>
+
+  return (
+    <ul className="divide-y rounded-lg border text-sm">
+      {items.map((item) => (
+        <li key={item.productId} className="flex items-center justify-between gap-4 px-4 py-2">
+          <span>{item.name}</span>
+          <span className="whitespace-nowrap font-medium">
+            {item.scanned} of {item.quantity} scanned
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export default function Warehouse() {
+  const navigate = useNavigate()
+  const [tab, setTab] = useState('TO_DISPATCH')
+  const [orders, setOrders] = useState([])
+  const [counts, setCounts] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const current = TABS.find((t) => t.value === tab)
+        const results = await Promise.all(
+          TABS.flatMap((t) => t.statuses.map((s) => api.get('/orders', { params: { status: s, limit: 50 } })))
+        )
+        if (cancelled) return
+        const byStatus = {}
+        let i = 0
+        TABS.forEach((t) => t.statuses.forEach((s) => { byStatus[s] = results[i++].data.data }))
+        setCounts({
+          TO_DISPATCH: byStatus.CONFIRMED.length + byStatus.PACKED.length,
+          DISPATCHED: byStatus.DISPATCHED.length,
+        })
+        setOrders(current.statuses.flatMap((s) => byStatus[s]))
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setError(err.response?.data?.error || 'Could not load orders. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, navigate])
 
   if (loading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-9 w-64" />
         <Skeleton className="h-56 w-full" />
-        <Skeleton className="h-56 w-full" />
       </div>
     )
   }
 
-  if (error) {
-    return <p className="text-sm text-destructive">Could not load the pick list. Please refresh the page.</p>
-  }
+  if (error) return <p className="text-sm text-destructive">{error}</p>
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {TABS.map((t) => (
-          <Button
-            key={t.value}
-            size="sm"
-            variant={tab === t.value ? 'default' : 'outline'}
-            onClick={() => setTab(t.value)}
-          >
+          <Button key={t.value} size="sm" variant={tab === t.value ? 'default' : 'outline'} onClick={() => setTab(t.value)}>
             {t.label}
-            {t.value === 'TO_PACK' && ` (${toPackCount})`}
+            {counts[t.value] != null && ` (${counts[t.value]})`}
           </Button>
         ))}
       </div>
 
       {orders.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {tab === 'TO_PACK' ? 'Nothing to pack right now. New orders appear here once they are confirmed.' : 'No packed orders yet.'}
+          {tab === 'TO_DISPATCH' ? 'Nothing to dispatch right now. New orders appear here once they are confirmed.' : 'No dispatched orders yet.'}
         </p>
       )}
 
-      {orders.map((order) => {
-        const lead = mockLeads.find((l) => l.id === order.leadId)
-        const quote = getQuote(order.quoteId)
-        const job = jobs.find((j) => j.orderId === order.id)
-        const packed = order.warehouseStatus === 'PACKED'
-
-        return (
-          <Card key={order.id}>
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div>
-                <CardTitle className="text-lg">
-                  {order.number}: {lead?.name ?? 'Unknown customer'}
-                </CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {quote ? packageLabel(quote.type, quote.kw) : 'Package'}
-                  {lead ? `, ${lead.city}` : ''}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Installation:{' '}
-                  <span className="font-medium text-foreground">
-                    {job?.date ? `${job.date} (${job.technician})` : 'Not scheduled yet'}
-                  </span>
-                </p>
-              </div>
-              {packed ? (
-                <Badge variant="secondary" className="border-transparent bg-green-100 text-green-700">Packed</Badge>
-              ) : (
-                <Badge variant="secondary" className="border-transparent bg-amber-100 text-amber-800">To pack</Badge>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="divide-y rounded-lg border text-sm">
-                {(quote?.items ?? []).map((item, i) => (
-                  <li key={i} className="flex items-center justify-between gap-4 px-4 py-2">
-                    <span>{item.name}</span>
-                    <span className="whitespace-nowrap font-medium">{item.qty} {item.unit}</span>
-                  </li>
-                ))}
-              </ul>
-              {packed ? (
-                <p className="text-sm text-muted-foreground">Packed on {order.packedAt}.</p>
-              ) : (
-                <Button disabled={busyId === order.id} onClick={() => handlePack(order)}>
-                  <PackageCheck className="mr-2 h-4 w-4" />
-                  {busyId === order.id ? 'Saving...' : 'Mark as packed'}
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
+      {orders.map((order) => (
+        <Card key={order.id}>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle className="text-lg">O-{order.id}: {order.lead?.name}</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {order.lead?.city}, confirmed {String(order.confirmedAt).slice(0, 10)}
+              </p>
+            </div>
+            {tab === 'TO_DISPATCH' ? (
+              <Badge variant="secondary" className="border-transparent bg-amber-100 text-amber-800">To dispatch</Badge>
+            ) : (
+              <Badge variant="secondary" className="border-transparent bg-green-100 text-green-700">Dispatched</Badge>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <PickList orderId={order.id} />
+            {tab === 'TO_DISPATCH' && (
+              <Button asChild>
+                <Link to="/dispatch">
+                  <ScanLine className="mr-2 h-4 w-4" />
+                  Scan serials and dispatch
+                </Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

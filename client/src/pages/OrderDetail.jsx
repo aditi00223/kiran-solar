@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,25 +17,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { PaymentBadge } from '@/pages/Orders'
-import { mockLeads } from '@/lib/mockLeads'
-import { getQuote, packageLabel, rupees } from '@/lib/mockPackages'
-import {
-  PAYMENT_METHODS,
-  getBalance,
-  getOrder,
-  getPaid,
-  recordPayment,
-} from '@/lib/mockOrders'
 
 const selectClass = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'
-
-const TYPE_LABEL = { ADVANCE: 'Advance', PART: 'Part payment', FULL: 'Full payment' }
+const PAYMENT_METHODS = ['UPI', 'Cash', 'Bank transfer', 'Cheque']
+const TYPE_LABEL = { ADVANCE: 'Advance', BALANCE: 'Balance', FULL: 'Full payment' }
+const rupees = (n) => 'Rs ' + Number(n || 0).toLocaleString('en-IN')
 
 function Detail({ label, children }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{children}</p>
+      <p className="text-sm font-medium">{children || '-'}</p>
     </div>
   )
 }
@@ -43,41 +36,64 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [order, setOrder] = useState(null)
-  const [lead, setLead] = useState(null)
-  const [quote, setQuote] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [, setVersion] = useState(0)
+  const [loadError, setLoadError] = useState(null)
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState('UPI')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // TEMPORARY: replace with api.get(`/orders/${id}`)
-    const timer = setTimeout(() => {
-      const found = getOrder(id)
-      setOrder(found)
-      setLead(found ? mockLeads.find((l) => l.id === found.leadId) ?? null : null)
-      setQuote(found ? getQuote(found.quoteId) : null)
-      setLoading(false)
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [id])
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const res = await api.get(`/orders/${id}`)
+        if (!cancelled) setOrder(res.data.data)
+      } catch (err) {
+        if (cancelled) return
+        if (err.response?.status === 401) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+        setLoadError(err.response?.data?.error || 'Could not load this order. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [id, navigate])
 
   async function handlePayment(e) {
     e.preventDefault()
     setError('')
+    const value = Number(amount)
+    if (!value || value <= 0) {
+      setError('Enter the amount received')
+      return
+    }
     setSaving(true)
     try {
-      // TEMPORARY: replace with api.post(`/orders/${id}/payments`, ...)
-      await new Promise((r) => setTimeout(r, 500))
-      recordPayment(order.id, { amount, method })
+      const res = await api.post(`/orders/${id}/payments`, {
+        amount: value,
+        type: value >= Number(order.balance) ? 'FULL' : 'BALANCE',
+        method,
+      })
+      setOrder((prev) => ({ ...prev, ...res.data.data }))
+      // reload for the full payment list
+      const fresh = await api.get(`/orders/${id}`)
+      setOrder(fresh.data.data)
       toast.success('Payment recorded')
       setAmount('')
-      setVersion((v) => v + 1)
     } catch (err) {
-      setError(err.message || 'Could not record the payment. Please try again.')
-      toast.error(err.message || 'Could not record the payment')
+      const message = err.response?.data?.error || 'Could not record the payment. Please try again.'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -93,17 +109,16 @@ export default function OrderDetail() {
     )
   }
 
-  if (!order || !lead) {
+  if (loadError || !order) {
     return (
       <div className="space-y-4">
-        <p className="text-muted-foreground">We could not find this order.</p>
+        <p className="text-destructive">{loadError || 'We could not find this order.'}</p>
         <Button variant="outline" onClick={() => navigate('/orders')}>Back to orders</Button>
       </div>
     )
   }
 
-  const paid = getPaid(order)
-  const balance = getBalance(order)
+  const balance = Number(order.balance)
 
   return (
     <div className="space-y-6">
@@ -113,23 +128,16 @@ export default function OrderDetail() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-xl">Order {order.number}</CardTitle>
+          <CardTitle className="text-xl">Order O-{order.id}</CardTitle>
           <PaymentBadge order={order} />
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Detail label="Customer">{lead.name}</Detail>
-          <Detail label="Phone">{lead.phone}</Detail>
-          <Detail label="Address">{lead.address}</Detail>
-          {quote && <Detail label="Package">{packageLabel(quote.type, quote.kw)}</Detail>}
-          <Detail label="Order date">{order.createdAt}</Detail>
-          {quote && (
-            <div>
-              <p className="text-xs text-muted-foreground">Quote</p>
-              <Link to={`/quotes/${quote.id}`} className="text-sm font-medium text-primary hover:underline">
-                {quote.number}
-              </Link>
-            </div>
-          )}
+          <Detail label="Customer">{order.lead?.name}</Detail>
+          <Detail label="Phone">{order.lead?.phone}</Detail>
+          <Detail label="Address">{order.lead?.address}</Detail>
+          <Detail label="City">{order.lead?.city}</Detail>
+          <Detail label="Status">{order.status}</Detail>
+          <Detail label="Confirmed on">{String(order.confirmedAt).slice(0, 10)}</Detail>
         </CardContent>
       </Card>
 
@@ -137,19 +145,19 @@ export default function OrderDetail() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Order total</p>
-            <p className="text-2xl font-semibold">{rupees(order.total)}</p>
+            <p className="text-2xl font-semibold">{rupees(order.totalAmount)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Paid so far</p>
-            <p className="text-2xl font-semibold text-green-700">{rupees(paid)}</p>
+            <p className="text-2xl font-semibold text-green-700">{rupees(order.paid)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Balance</p>
-            <p className="text-2xl font-semibold">{rupees(balance)}</p>
+            <p className="text-2xl font-semibold">{rupees(order.balance)}</p>
           </CardContent>
         </Card>
       </div>
@@ -169,9 +177,9 @@ export default function OrderDetail() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {order.payments.map((p) => (
+              {(order.payments ?? []).map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell>{p.date}</TableCell>
+                  <TableCell>{String(p.paidAt).slice(0, 10)}</TableCell>
                   <TableCell>{TYPE_LABEL[p.type] ?? p.type}</TableCell>
                   <TableCell>{p.method}</TableCell>
                   <TableCell className="text-right font-medium">{rupees(p.amount)}</TableCell>
