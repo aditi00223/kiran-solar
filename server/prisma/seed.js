@@ -436,6 +436,16 @@ await seedProducts();
     await seedLeads();
       await seedHistory();
   // Products, templates and demo data get added here in the next steps
+    if ((await prisma.supplier.count()) === 0) {
+    await prisma.supplier.createMany({
+      data: [
+        { name: "Punjab Solar Traders", phone: "9815011223", city: "Ludhiana" },
+        { name: "Jalandhar Power Systems", phone: "9872033445", city: "Jalandhar" },
+        { name: "Amritsar Electricals", phone: "9814077889", city: "Amritsar" },
+      ],
+    });
+    console.log("Suppliers created");
+  }
 }
 
 main()

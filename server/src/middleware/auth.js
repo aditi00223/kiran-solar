@@ -22,6 +22,7 @@ function authenticate(req, res, next) {
 
 // Step 2: does this role have permission? Use it after authenticate.
 // Example: router.get("/leads", authenticate, requireRole("SALES", "DIRECTOR"), ...)
+// requireRole returns a function -> closure
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
