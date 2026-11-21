@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Download, Printer } from 'lucide-react'
+import { pdf } from '@react-pdf/renderer'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import QuotePdf from '@/components/QuotePdf'
 import { mockLeads } from '@/lib/mockLeads'
 import { GST_RATE, getQuote, packageLabel, rupees } from '@/lib/mockPackages'
 
@@ -30,6 +33,7 @@ export default function QuoteView() {
   const [quote, setQuote] = useState(null)
   const [lead, setLead] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState('')
 
   useEffect(() => {
     // TEMPORARY: replace with api.get(`/quotes/${id}`)
@@ -41,6 +45,46 @@ export default function QuoteView() {
     }, 400)
     return () => clearTimeout(timer)
   }, [id])
+
+  async function makeBlob() {
+    return pdf(<QuotePdf quote={quote} lead={lead} />).toBlob()
+  }
+
+  async function handleDownload() {
+    setBusy('download')
+    try {
+      const blob = await makeBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${quote.number}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Quote PDF downloaded')
+    } catch {
+      toast.error('Could not create the PDF. Please try again.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function handlePrint() {
+    setBusy('print')
+    try {
+      const blob = await makeBlob()
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url)
+      if (!win) {
+        toast.error('The browser blocked the print window. Allow pop-ups for this site and try again.')
+        return
+      }
+      win.addEventListener('load', () => win.print())
+    } catch {
+      toast.error('Could not open the PDF for printing. Please try again.')
+    } finally {
+      setBusy('')
+    }
+  }
 
   if (loading) {
     return (
@@ -68,8 +112,18 @@ export default function QuoteView() {
       </Link>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl">Quote {quote.number}</CardTitle>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handlePrint} disabled={busy !== ''}>
+              <Printer className="mr-2 h-4 w-4" />
+              {busy === 'print' ? 'Preparing...' : 'Print'}
+            </Button>
+            <Button onClick={handleDownload} disabled={busy !== ''}>
+              <Download className="mr-2 h-4 w-4" />
+              {busy === 'download' ? 'Preparing...' : 'Download PDF'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Detail label="Customer">{lead.name}</Detail>
