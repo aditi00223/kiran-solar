@@ -54,9 +54,7 @@ const recordSurveySchema = z.object({
 
 const reviewSurveySchema = z
   .object({
-    decision: z.enum(["APPROVED", "REJECTED"], {
-      errorMap: () => ({ message: "Decision must be APPROVED or REJECTED" }),
-    }),
+    decision: z.enum(["APPROVED", "REJECTED"], { message: "Decision must be APPROVED or REJECTED" }),
     reviewNote: z.string().trim().optional(),
   })
   .refine((v) => v.decision !== "REJECTED" || (v.reviewNote && v.reviewNote.length > 0), {
