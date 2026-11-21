@@ -1,16 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import Login from '@/pages/Login'
+import AppLayout from '@/layouts/AppLayout'
 
 // Temporary page for routes we haven't built yet
 function ComingSoon() {
   const { pathname } = useLocation()
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <p className="text-muted-foreground">
-        Page <span className="font-semibold text-foreground">{pathname}</span> is coming soon.
-      </p>
-    </div>
+    <p className="text-muted-foreground">
+      Page <span className="font-semibold text-foreground">{pathname}</span> is coming soon.
+    </p>
   )
 }
 
@@ -20,7 +19,9 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="*" element={<ComingSoon />} />
+        <Route element={<AppLayout />}>
+          <Route path="*" element={<ComingSoon />} />
+        </Route>
       </Routes>
       <Toaster richColors position="top-right" />
     </BrowserRouter>
