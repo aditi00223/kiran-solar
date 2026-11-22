@@ -42,12 +42,17 @@ function requireRole(...allowedRoles) {
 
 // Optional login: if a token is sent it must be valid, but no token is fine.
 // Used by public routes that behave differently for logged-in staff.
+// Optional login: a valid token identifies the user, a missing or bad token means a guest.
 function optionalAuth(req, res, next) {
   const header = req.headers.authorization || "";
-  if (!header.startsWith("Bearer ")) {
-    return next();
+  if (header.startsWith("Bearer ")) {
+    try {
+      const payload = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+      req.user = { id: payload.id, role: payload.role, name: payload.name };
+    } catch (err) {
+      // bad or expired token: carry on as a guest
+    }
   }
-  return authenticate(req, res, next);
+  return next();
 }
-
 module.exports = { authenticate, optionalAuth, requireRole };
